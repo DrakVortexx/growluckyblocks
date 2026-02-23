@@ -2015,7 +2015,7 @@
 
     const CREATURE_NAMES_BY_RANK = {
       basic: ["Fat Cat", "Tiny Bunny", "Lucky Slime"],
-      common: ["Mystery Cat", "Mini Dragon", "Goblin Pup"],
+      common: ["Mini Dragon", "Goblin Pup"],
       rare: ["Ice Fox", "Lava Toad", "Spike Turtle"],
       epic: ["Hydra Dragon", "Electric Owl", "Shadow Panther"],
       legendary: ["Golden Griffin", "Crystal Wolf", "Phoenix Chick"],
@@ -2024,7 +2024,7 @@
       secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger"],
       divine: ["Angelic Lion", "Solar Dragon", "Mystic Owlbear"],
       transcendent: ["Infinity Serpent", "Quantum Phoenix", "Cosmic Whale"],
-      omniversal: ["Omniversal Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
+      omniversal: ["Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
     };
     const INDEX_ENTRIES = RANKS.flatMap((rank) =>
       (CREATURE_NAMES_BY_RANK[rank.key] || []).map((name) => ({ rank, name }))
@@ -2119,7 +2119,7 @@
     }
     const CREATURE_RATE_BY_NAME = {
       "fat cat": 2.30, "tiny bunny": 3.20, "lucky slime": 4.60,
-      "mystery cat": 12, "mini dragon": 15, "goblin pup": 19,
+      "mini dragon": 15, "goblin pup": 19,
       "ice fox": 55, "lava toad": 66, "spike turtle": 78,
       "hydra dragon": 210, "electric owl": 255, "shadow panther": 295,
       "golden griffin": 640, "crystal wolf": 780, "phoenix chick": 890,
@@ -2128,7 +2128,7 @@
       "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
       "angelic lion": 22000000, "solar dragon": 34000000, "mystic owlbear": 48000000,
       "infinity serpent": 120000000, "quantum phoenix": 180000000, "cosmic whale": 245000000,
-      "omniversal mystery cat": 360000000, "universe hydra": 620000000, "multiverse dragon": 880000000
+      "mystery cat": 700000000, "universe hydra": 620000000, "multiverse dragon": 880000000
     };
     const LOW_QUALITY_MOBILE = MOBILE_DETECTED;
     const MOBILE_PARTICLE_SCALE = LOW_QUALITY_MOBILE ? 0.45 : 1;
@@ -2687,6 +2687,17 @@
 
     function normalizeCreatureNameKey(name) {
       return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    function isValidCreatureNameForRank(rankKey, creatureName) {
+      const rank = getRankByKey(normalizeBlockKey(rankKey || "basic")).key;
+      const pool = Array.isArray(CREATURE_NAMES_BY_RANK[rank]) ? CREATURE_NAMES_BY_RANK[rank] : [];
+      const key = normalizeCreatureNameKey(creatureName);
+      if (!key) return false;
+      for (const candidate of pool) {
+        if (normalizeCreatureNameKey(candidate) === key) return true;
+      }
+      return false;
     }
 
     function isFatCatCreatureName(name) {
@@ -4517,11 +4528,13 @@
       state.selectedCreatureId = "";
       for (const saved of payload.creatures || []) {
         const rank = getRankByKey(normalizeBlockKey(saved.rankKey || "basic"));
+        const creatureName = String(saved.name || "");
+        if (!isValidCreatureNameForRank(rank.key, creatureName)) continue;
         const mutation = normalizeMutation(saved.mutation || (saved.blueMoon ? "bluemoon" : "normal"));
         const savedRate = Number(saved.rate);
         const rate = (Number.isFinite(savedRate) && savedRate > 0)
           ? savedRate
-          : fixedCreatureRateForCreature(rank.key, String(saved.name || ""), mutation);
+          : fixedCreatureRateForCreature(rank.key, creatureName, mutation);
         const targetPedestal = saved.pedestalId ? getPedestalById(saved.pedestalId) : findFreeCreaturePedestal();
         if (!targetPedestal || targetPedestal.creatureId) continue;
         if (targetPedestal.hasBlock) {
@@ -4532,7 +4545,7 @@
           targetPedestal.block.visible = false;
           clearMeshLabel(targetPedestal.block);
         }
-        spawnCreatureOnPedestal(rank, rate, targetPedestal, saved.name, { mutation, id: String(saved.id || "") });
+        spawnCreatureOnPedestal(rank, rate, targetPedestal, creatureName, { mutation, id: String(saved.id || "") });
       }
       applyOfflineProgress(payload);
     }

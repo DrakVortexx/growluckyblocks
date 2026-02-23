@@ -69,7 +69,6 @@ const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Fat Cat", rankKey: "basic", rate: 2.30 },
   { name: "Tiny Bunny", rankKey: "basic", rate: 3.20 },
   { name: "Lucky Slime", rankKey: "basic", rate: 4.60 },
-  { name: "Mystery Cat", rankKey: "common", rate: 12 },
   { name: "Mini Dragon", rankKey: "common", rate: 15 },
   { name: "Goblin Pup", rankKey: "common", rate: 19 },
   { name: "Ice Fox", rankKey: "rare", rate: 55 },
@@ -96,13 +95,23 @@ const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Infinity Serpent", rankKey: "transcendent", rate: 120000000 },
   { name: "Quantum Phoenix", rankKey: "transcendent", rate: 180000000 },
   { name: "Cosmic Whale", rankKey: "transcendent", rate: 245000000 },
-  { name: "Omniversal Mystery Cat", rankKey: "omniversal", rate: 360000000 },
+  { name: "Mystery Cat", rankKey: "omniversal", rate: 700000000 },
   { name: "Universe Hydra", rankKey: "omniversal", rate: 620000000 },
   { name: "Multiverse Dragon", rankKey: "omniversal", rate: 880000000 }
 ]);
 const SPAWN_CREATURE_CATALOG_BY_KEY = new Map(
   SPAWN_CREATURE_CATALOG.map((c) => [normalizeCreatureNameKey(c.name), c])
 );
+const VALID_CREATURE_NAME_KEYS_BY_RANK = (() => {
+  const out = {};
+  for (const key of RANK_KEYS) out[key] = new Set();
+  for (const row of SPAWN_CREATURE_CATALOG) {
+    const rankKey = normalizeRankKey(row.rankKey || "basic");
+    if (!out[rankKey]) out[rankKey] = new Set();
+    out[rankKey].add(normalizeCreatureNameKey(row.name));
+  }
+  return Object.freeze(out);
+})();
 
 function utcDayKey(ts = Date.now()) {
   const d = new Date(ts);
@@ -173,11 +182,16 @@ function pedestalIndexFromId(pedestalId) {
 
 function ensureCreatureIdsAndPedestalLinks(playerData) {
   if (!playerData || typeof playerData !== "object") return;
-  const creatures = Array.isArray(playerData.creatures) ? playerData.creatures : [];
+  let creatures = Array.isArray(playerData.creatures) ? playerData.creatures : [];
   const pedestals = Array.isArray(playerData.pedestals) ? playerData.pedestals : [];
   const maxPedestals = maxPedestalsForData(playerData);
   if (pedestals.length > maxPedestals) pedestals.length = maxPedestals;
   const seenIds = new Set();
+
+  creatures = creatures.filter((c) => {
+    if (!c || typeof c !== "object") return false;
+    return isValidCreatureNameForRank(c.rankKey || "basic", c.name || "");
+  });
 
   for (let i = 0; i < creatures.length; i += 1) {
     const c = creatures[i];
@@ -438,6 +452,15 @@ function cleanServerName(v) {
 
 function normalizeCreatureNameKey(v) {
   return String(v || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isValidCreatureNameForRank(rankKey, creatureName) {
+  const key = normalizeRankKey(rankKey);
+  const allowed = VALID_CREATURE_NAME_KEYS_BY_RANK[key];
+  if (!allowed) return false;
+  const nameKey = normalizeCreatureNameKey(creatureName);
+  if (!nameKey) return false;
+  return allowed.has(nameKey);
 }
 
 function normalizeRankKey(v) {
