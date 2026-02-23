@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Grow Lucky Blocks with farm and lucky block">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c203f"/>
+      <stop offset="1" stop-color="#1b4d8a"/>
+    </linearGradient>
+    <linearGradient id="topFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffbb2"/>
+      <stop offset="1" stop-color="#ffd247"/>
+    </linearGradient>
+    <linearGradient id="leftFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7c957"/>
+      <stop offset="1" stop-color="#d98f23"/>
+    </linearGradient>
+    <linearGradient id="rightFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e3991f"/>
+      <stop offset="1" stop-color="#b86503"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#ffc953" flood-opacity="0.8"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#ffdd7a" flood-opacity="0.6"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB" >
+      <feDropShadow dx="2" dy="2" stdDeviation="1" flood-color="#022138" flood-opacity="0.8"/>
+    </filter>
+    <linearGradient id="farmField" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4caf50"/>
+      <stop offset="1" stop-color="#2e7d32"/>
+    </linearGradient>
+    <linearGradient id="farmRoof" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b71c1c"/>
+      <stop offset="1" stop-color="#880e0e"/>
+    </linearGradient>
+    <linearGradient id="farmWall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#efebe9"/>
+      <stop offset="1" stop-color="#bdbdbd"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#bg)" rx="96" ry="96"/>
+
+  <!-- Text "Grow Lucky Blocks" -->
+  <text x="256" y="54" text-anchor="middle" fill="#b1f2df" stroke="#041d31" stroke-width="1.8" paint-order="stroke"
+    font-size="30" font-family="'Exo 2', 'Segoe UI', Arial, sans-serif" font-weight="900" letter-spacing="0.7" filter="url(#textShadow)">Grow Lucky Blocks</text>
+
+  <!-- Farm icon on left -->
+  <g transform="translate(110 190) scale(0.65)">
+    <!-- Field base -->
+    <rect x="-80" y="40" width="160" height="60" fill="url(#farmField)" rx="8" ry="8"/>
+    <!-- Field stripes -->
+    <line x1="-80" y1="50" x2="80" y2="50" stroke="#33691e" stroke-width="3"/>
+    <line x1="-80" y1="62" x2="80" y2="62" stroke="#33691e" stroke-width="3"/>
+    <line x1="-80" y1="74" x2="80" y2="74" stroke="#33691e" stroke-width="3"/>
+    <line x1="-40" y1="40" x2="-40" y2="100" stroke="#33691e" stroke-width="3"/>
+    <line x1="0" y1="40" x2="0" y2="100" stroke="#33691e" stroke-width="3"/>
+    <line x1="40" y1="40" x2="40" y2="100" stroke="#33691e" stroke-width="3"/>
+
+    <!-- Barn base -->
+    <rect x="-45" y="-90" width="90" height="70" rx="8" ry="8" fill="url(#farmWall)" stroke="#b0b0b0" stroke-width="2"/>
+    <!-- Barn roof -->
+    <polygon points="-60,-90 0,-150 60,-90" fill="url(#farmRoof)" stroke="#7f0000" stroke-width="2"/>
+    <!-- Barn door -->
+    <rect x="-15" y="-40" width="30" height="40" fill="#660000" stroke="#7f0000" stroke-width="2" rx="4" ry="4"/>
+    <!-- Door detail -->
+    <line x1="0" y1="-40" x2="0" y2="0" stroke="#9b0000" stroke-width="3"/>
+  </g>
+
+  <!-- Arrow from farm to lucky block -->
+  <g stroke="#b1f2df" stroke-width="4.7" fill="none" filter="url(#glow)">
+    <path d="M190 280 L320 280" />
+    <polygon points="320,280 310,270 310,290" fill="#b1f2df"/>
+  </g>
+
+  <!-- Lucky Block with glow on right -->
+  <g transform="translate(400 270) scale(0.88)" filter="url(#glow)">
+    <circle cx="0" cy="-62" r="165" fill="#112a4a" opacity="0.6"/>
+    <path d="M-132 -28L0 -104L132 -28L0 48Z" fill="url(#topFace)"/>
+    <path d="M-132 -28V86L0 162V48Z" fill="url(#leftFace)"/>
+    <path d="M132 -28V86L0 162V48Z" fill="url(#rightFace)"/>
+    <path d="M0 -104V48" stroke="#f3b24d" stroke-width="8" opacity="0.38"/>
+    <path d="M-66 -66L66 -66" stroke="#f3b24d" stroke-width="8" opacity="0.32"/>
+    <path d="M-66 10L66 10" stroke="#f3b24d" stroke-width="8" opacity="0.28"/>
+    <g fill="#fff6bf" opacity="0.95">
+      <circle cx="-86" cy="-44" r="9"/>
+      <circle cx="84" cy="-14" r="7"/>
+      <circle cx="-70" cy="76" r="8"/>
+      <circle cx="70" cy="98" r="7"/>
+    </g>
+  </g>
+
+  <!-- Income box below lucky block -->
+  <g transform="translate(400 432) scale(0.88)">
+    <rect x="-218" y="-40" width="436" height="58" rx="22" fill="#0b2340" stroke="#99d8ff" stroke-width="3.5" filter="url(#glow)"/>
+    <text x="0" y="-4" text-anchor="middle" fill="#b1f2df" stroke="#041d31" stroke-width="2" paint-order="stroke"
+      font-size="46" font-family="'Exo 2', 'Segoe UI', Arial, sans-serif" font-weight="900" letter-spacing="0.6" filter="url(#textShadow)">99999999999/s</text>
+  </g>
+</svg>
