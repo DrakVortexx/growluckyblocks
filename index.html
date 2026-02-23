@@ -1752,17 +1752,17 @@
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
     const RANKS = [
-      { key: "basic", label: "Basic", min: 1, max: 2, weight: 45, color: "c-basic" },
-      { key: "common", label: "Common", min: 24, max: 52, weight: 25, color: "c-common" },
-      { key: "rare", label: "Rare", min: 270, max: 480, weight: 12, color: "c-rare" },
-      { key: "epic", label: "Epic", min: 1650, max: 2580, weight: 7, color: "c-epic" },
-      { key: "legendary", label: "Legendary", min: 26000, max: 79000, weight: 3, color: "c-legendary" },
-      { key: "mythic", label: "Mythic", min: 710000, max: 1850000, weight: 1, color: "c-mythic" },
-      { key: "godly", label: "Godly", min: 7500000, max: 35400000, weight: 0.1, color: "c-godly" },
-      { key: "secret", label: "Secret", min: 210000000, max: 500000000, weight: 0.01, color: "c-secret" },
-      { key: "divine", label: "Divine", min: 3800000000, max: 8500000000, weight: 0.001, color: "c-divine" },
-      { key: "transcendent", label: "Transcendent", min: 175000000000000, max: 520000000000000, weight: 0.0001, color: "c-transcendent" },
-      { key: "omniversal", label: "Omniversal", min: 11000000000000000, max: 25000000000000000, weight: 0.00001, color: "c-omniversal" }
+      { key: "basic", label: "Basic", min: 2, max: 5, weight: 45, color: "c-basic" },
+      { key: "common", label: "Common", min: 10, max: 20, weight: 25, color: "c-common" },
+      { key: "rare", label: "Rare", min: 50, max: 80, weight: 12, color: "c-rare" },
+      { key: "epic", label: "Epic", min: 200, max: 300, weight: 7, color: "c-epic" },
+      { key: "legendary", label: "Legendary", min: 600, max: 900, weight: 3, color: "c-legendary" },
+      { key: "mythic", label: "Mythic", min: 2000, max: 3000, weight: 1, color: "c-mythic" },
+      { key: "godly", label: "Godly", min: 50000, max: 120000, weight: 0.1, color: "c-godly" },
+      { key: "secret", label: "Secret", min: 1000000, max: 3000000, weight: 0.01, color: "c-secret" },
+      { key: "divine", label: "Divine", min: 20000000, max: 50000000, weight: 0.001, color: "c-divine" },
+      { key: "transcendent", label: "Transcendent", min: 100000000, max: 250000000, weight: 0.0001, color: "c-transcendent" },
+      { key: "omniversal", label: "Omniversal", min: 300000000, max: 900000000, weight: 0.00001, color: "c-omniversal" }
     ];
     const SPECIAL_BLOCKS = [
       { key: "valentinesblock", label: "Valentine's Day", baseRankKey: "legendary", color: "c-epic" }
@@ -1837,17 +1837,17 @@
     const PERSONAL_LUCK_STARDUST_RATE = 0.04;
     const ENABLE_LEGACY_RANK_MIGRATION = false;
     const STEAL_TIME_BY_RANK = Object.freeze({
-      basic: 2,
-      common: 4,
-      rare: 8,
-      epic: 15,
-      legendary: 25,
-      mythic: 35,
-      godly: 50,
-      secret: 75,
-      divine: 90,
-      transcendent: 120,
-      omniversal: 120
+      basic: 4,
+      common: 6,
+      rare: 12,
+      epic: 20,
+      legendary: 35,
+      mythic: 50,
+      godly: 90,
+      secret: 180,
+      divine: 420,
+      transcendent: 10800,
+      omniversal: 43200
     });
     const BAT_DEFS = Object.freeze([
       { key: "sprout", label: "Sprout Bat", cost: 0, stunSec: 0.8, cooldownSec: 1.5, desc: "Starter interrupt bat." },
@@ -2014,25 +2014,17 @@
     };
 
     const CREATURE_NAMES_BY_RANK = {
-      basic: ["Sprout Bunny", "Leaf Slime", "Tiny Chick", "Baby Turtle", "Fat Cat"],
-      common: ["Forest Fox", "Moss Golem", "Blue Bird", "Stone Beetle", "Cloud Sheep"],
-      uncommon: ["Ember Lizard", "Crystal Crab", "Aqua Serpent", "Electric Mouse", "Jungle Panther"],
-      rare: ["Ice Phoenix", "Thunder Wolf", "Shadow Spider", "Lava Tiger", "Storm Eagle"],
-      elite: ["Void Knight", "Frost Dragon", "Solar Lion", "Spirit Samurai", "Dark Griffin"],
-      epic: ["Galaxy Dragon", "Star Unicorn", "Infernal Hydra", "Cosmic Kraken", "Phantom Wyrm"],
-      legendary: ["Time Dragon", "Reality Phoenix", "Chaos Titan", "Infinity Serpent", "Eternal Angel"],
-      mythic: ["Celestial Leviathan", "Quantum Beast", "Cosmic Emperor", "Void Devourer", "Dimension Breaker"],
-      godly: ["Sun God Ra", "Thunder Zeus", "Lunar Goddess", "Creation Spirit", "Guardian of Worlds"],
-      secret: ["Glitch Entity", "Error Dragon", "Forgotten One", "Corrupted Angel", "Lost Guardian", "THE TUFF TURTLE"],
-      prismatic: ["Rainbow Phoenix", "Spectrum Dragon", "Prism Golem", "Aurora Serpent", "Neon Leviathan"],
-      divine: ["Archangel Supreme", "God of Light", "Celestial Overlord", "Sacred Titan", "Divine Emperor"],
-      apex: ["King of Infinity", "Omega Dragon", "World Destroyer", "Prime Creator", "Apex Leviathan"],
-      ascended: ["Ascended Void King", "Final Angel", "Cosmic Architect", "True Titan", "Alpha Omega"],
-      ancient: ["Ancient Dragon God", "Primordial Beast", "First Phoenix", "Eternal Guardian", "Ancient Titan"],
-      celestial: ["Nebula Serpent", "Galaxy Overlord", "Starforged Titan", "Astral Dragon", "Cosmic Prophet"],
-      transcendent: ["Reality Shaper", "Dimension Weaver", "Time Lord", "Infinite Monarch", "Universal Architect"],
-      eturnal: ["Eternal Dragon", "Supreme Entity", "The Absolute", "Final Overlord", "Origin Guardian"],
-      omniversal: ["Omniversal Emperor", "Mystery Cat", "The One Above", "Infinity Sovereign", "Paradox God"]
+      basic: ["Fat Cat", "Tiny Bunny", "Lucky Slime"],
+      common: ["Mystery Cat", "Mini Dragon", "Goblin Pup"],
+      rare: ["Ice Fox", "Lava Toad", "Spike Turtle"],
+      epic: ["Hydra Dragon", "Electric Owl", "Shadow Panther"],
+      legendary: ["Golden Griffin", "Crystal Wolf", "Phoenix Chick"],
+      mythic: ["Celestial Cat", "Moon Serpent", "Starry Elk"],
+      godly: ["Omnisphinx", "Thunder Behemoth", "Eternal Fox"],
+      secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger"],
+      divine: ["Angelic Lion", "Solar Dragon", "Mystic Owlbear"],
+      transcendent: ["Infinity Serpent", "Quantum Phoenix", "Cosmic Whale"],
+      omniversal: ["Omniversal Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
     };
     const INDEX_ENTRIES = RANKS.flatMap((rank) =>
       (CREATURE_NAMES_BY_RANK[rank.key] || []).map((name) => ({ rank, name }))
@@ -2126,25 +2118,17 @@
       }
     }
     const CREATURE_RATE_BY_NAME = {
-      "sprout bunny": 1.00, "leaf slime": 1.25, "tiny chick": 1.55, "baby turtle": 1.90, "fat cat": 2.30,
-      "forest fox": 24, "moss golem": 31, "blue bird": 38, "stone beetle": 44, "cloud sheep": 52,
-      "ember lizard": 115, "crystal crab": 128, "aqua serpent": 139, "electric mouse": 150, "jungle panther": 168,
-      "ice phoenix": 270, "thunder wolf": 325, "shadow spider": 381, "lava tiger": 420, "storm eagle": 480,
-      "void knight": 620, "frost dragon": 730, "solar lion": 845, "spirit samurai": 920, "dark griffin": 1020,
-      "galaxy dragon": 1650, "star unicorn": 1840, "infernal hydra": 2050, "cosmic kraken": 2300, "phantom wyrm": 2580,
-      "time dragon": 26000, "reality phoenix": 39000, "chaos titan": 52000, "infinity serpent": 63000, "eternal angel": 79000,
-      "celestial leviathan": 710000, "quantum beast": 920000, "cosmic emperor": 1180000, "void devourer": 1470000, "dimension breaker": 1850000,
-      "sun god ra": 7500000, "thunder zeus": 12900000, "lunar goddess": 18800000, "creation spirit": 26700000, "guardian of worlds": 35400000,
-      "glitch entity": 210000000, "error dragon": 276000000, "forgotten one": 341000000, "corrupted angel": 415000000, "lost guardian": 495000000, "the tuff turtle": 500000000,
-      "rainbow phoenix": 1250000000, "spectrum dragon": 1580000000, "prism golem": 1920000000, "aurora serpent": 2250000000, "neon leviathan": 2600000000,
-      "archangel supreme": 3800000000, "god of light": 4700000000, "celestial overlord": 5800000000, "sacred titan": 7100000000, "divine emperor": 8500000000,
-      "king of infinity": 15400000000, "omega dragon": 21800000000, "world destroyer": 29600000000, "prime creator": 38200000000, "apex leviathan": 48700000000,
-      "ascended void king": 220000000000, "final angel": 640000000000, "cosmic architect": 1250000000000, "true titan": 2050000000000, "alpha omega": 3120000000000,
-      "ancient dragon god": 4200000000000, "primordial beast": 5100000000000, "first phoenix": 6300000000000, "eternal guardian": 7600000000000, "ancient titan": 9200000000000,
-      "nebula serpent": 58000000000000, "galaxy overlord": 74000000000000, "starforged titan": 91000000000000, "astral dragon": 109000000000000, "cosmic prophet": 128000000000000,
-      "reality shaper": 175000000000000, "dimension weaver": 242000000000000, "time lord": 321000000000000, "infinite monarch": 412000000000000, "universal architect": 520000000000000,
-      "eternal dragon": 1100000000000000, "supreme entity": 2300000000000000, "the absolute": 3800000000000000, "final overlord": 5900000000000000, "origin guardian": 8400000000000000,
-      "paradox god": 11000000000000000, "infinity sovereign": 16000000000000000, "the one above": 20000000000000000, "mystery cat": 23000000000000000, "omniversal emperor": 25000000000000000
+      "fat cat": 2.30, "tiny bunny": 3.20, "lucky slime": 4.60,
+      "mystery cat": 12, "mini dragon": 15, "goblin pup": 19,
+      "ice fox": 55, "lava toad": 66, "spike turtle": 78,
+      "hydra dragon": 210, "electric owl": 255, "shadow panther": 295,
+      "golden griffin": 640, "crystal wolf": 780, "phoenix chick": 890,
+      "celestial cat": 2100, "moon serpent": 2550, "starry elk": 2980,
+      "omnisphinx": 52000, "thunder behemoth": 84000, "eternal fox": 118000,
+      "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
+      "angelic lion": 22000000, "solar dragon": 34000000, "mystic owlbear": 48000000,
+      "infinity serpent": 120000000, "quantum phoenix": 180000000, "cosmic whale": 245000000,
+      "omniversal mystery cat": 360000000, "universe hydra": 620000000, "multiverse dragon": 880000000
     };
     const LOW_QUALITY_MOBILE = MOBILE_DETECTED;
     const MOBILE_PARTICLE_SCALE = LOW_QUALITY_MOBILE ? 0.45 : 1;
@@ -2710,7 +2694,8 @@
     }
 
     function isMysteryCatCreatureName(name) {
-      return normalizeCreatureNameKey(name) === "mysterycat";
+      const key = normalizeCreatureNameKey(name);
+      return key === "mysterycat" || key === "omniversalmysterycat";
     }
 
     function setCreatureShellVisible(group, visible) {
