@@ -1120,7 +1120,6 @@
     .dockBtn.barn { background: linear-gradient(180deg, #9d9d9d, #666); }
     .dockBtn.chat { background: linear-gradient(180deg, #5f8dff, #3258c2); }
     .dockBtn.index { background: linear-gradient(180deg, #77c9ff, #3c79d6); }
-    .dockBtn.inventory { background: linear-gradient(180deg, #8f86ff, #4f4ac6); }
     .dockBtn.admin { background: linear-gradient(180deg, #a9b3ff, #5f68cf); }
     .dockBtn.logout { background: linear-gradient(180deg, #fd8f8f, #be3c3c); }
 
@@ -1595,7 +1594,6 @@
     <button id="dockShop" class="dockBtn shop">Shop</button>
     <button id="dockRebirth" class="dockBtn rebirth">Rebirth</button>
     <button id="dockIndex" class="dockBtn index">Index</button>
-    <button id="dockInventory" class="dockBtn inventory">Inventory</button>
   </div>
   <div id="leftDock">
     <button id="dockSettings" class="dockBtn guide">Settings</button>
@@ -1615,7 +1613,7 @@
     <p><b>Sell Creature:</b> Walk up to a creature and press E</p>
     <p><b>Open Lucky Block:</b> F</p>
     <p><b>Bat Hit:</b> R</p>
-    <p><b>Inventory:</b> ` (backtick)</p>
+    <p><b>Inventory:</b> ` (backtick) or Tab</p>
     <p><b>Global Chat:</b> Y</p>
     <p><b>Open Shop:</b> Q (near Seed Shack)</p>
     <p><b>Moon Wheel:</b> E (next to Seed Shack)</p>
@@ -1877,7 +1875,6 @@
     const dockShopBtn = document.getElementById("dockShop");
     const dockRebirthBtn = document.getElementById("dockRebirth");
     const dockIndexBtn = document.getElementById("dockIndex");
-    const dockInventoryBtn = document.getElementById("dockInventory");
     const dockSettingsBtn = document.getElementById("dockSettings");
     const dockGuideBtn = document.getElementById("dockGuide");
     const sellCreatureModalEl = document.getElementById("sellCreatureModal");
@@ -7475,7 +7472,6 @@
       dockShopBtn.classList.toggle("active", !!state.shopOpen);
       dockRebirthBtn.classList.toggle("active", rebirthPanelEl.style.display !== "none");
       dockIndexBtn.classList.toggle("active", indexPanelEl.classList.contains("open"));
-      dockInventoryBtn.classList.toggle("active", !!state.inventoryOpen);
       dockSettingsBtn.classList.toggle("active", settingsPanelEl.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
       dockChatBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
@@ -7534,7 +7530,8 @@
           return;
         }
 
-        if (e.code === "Backquote") {
+        if (e.code === "Backquote" || e.code === "Tab") {
+          if (e.code === "Tab") e.preventDefault();
           toggleInventory();
           return;
         }
@@ -7583,10 +7580,6 @@
       dockIndexBtn.addEventListener("click", () => {
         toggleGuide(false);
         toggleIndexPanel();
-      });
-      dockInventoryBtn.addEventListener("click", () => {
-        toggleGuide(false);
-        toggleInventory();
       });
       dockSettingsBtn.addEventListener("click", () => {
         toggleGuide(false);
