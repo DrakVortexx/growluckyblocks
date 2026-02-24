@@ -2018,7 +2018,7 @@
       common: ["Mini Dragon", "Goblin Pup"],
       rare: ["Ice Fox", "Lava Toad", "Spike Turtle"],
       epic: ["Hydra Dragon", "Electric Owl", "Shadow Panther"],
-      legendary: ["Golden Griffin", "Crystal Wolf", "Phoenix Chick"],
+      legendary: ["Golden Griffin", "Crystal Wolf", "Little ball of fury"],
       mythic: ["Celestial Cat", "Moon Serpent", "Starry Elk"],
       godly: ["Omnisphinx", "Thunder Behemoth", "Eternal Fox"],
       secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger"],
@@ -2122,7 +2122,7 @@
       "mini dragon": 15, "goblin pup": 19,
       "ice fox": 55, "lava toad": 66, "spike turtle": 78,
       "hydra dragon": 210, "electric owl": 255, "shadow panther": 295,
-      "golden griffin": 640, "crystal wolf": 780, "phoenix chick": 890,
+      "golden griffin": 640, "crystal wolf": 780, "little ball of fury": 700,
       "celestial cat": 2100, "moon serpent": 2550, "starry elk": 2980,
       "omnisphinx": 52000, "thunder behemoth": 84000, "eternal fox": 118000,
       "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
@@ -2132,13 +2132,27 @@
     };
     const LOW_QUALITY_MOBILE = MOBILE_DETECTED;
     const MOBILE_PARTICLE_SCALE = LOW_QUALITY_MOBILE ? 0.45 : 1;
-    const BASIC_BLOCK_GLB_PATH = "./assets/blocks/basic/BasicBlock.glb";
+    const BLOCK_GLB_PATH_BY_RANK = Object.freeze({
+      basic: "./assets/blocks/basic/BasicBlock.glb",
+      common: "./assets/blocks/common/commonblock.glb",
+      rare: "./assets/blocks/rare/rare.glb",
+      epic: "./assets/blocks/epic/epic.glb",
+      legendary: "./assets/blocks/legendary/legendary.glb",
+      mythic: "./assets/blocks/mythic/mythic.glb",
+      godly: "./assets/blocks/godly/godly.glb",
+      secret: "./assets/blocks/secret/secret.glb",
+      transcendent: "./assets/blocks/transcendent/trancendant.glb",
+      omniversal: "./assets/blocks/omniversal/omniversal.glb"
+    });
     const FAT_CAT_GLB_PATH = "./assets/creatures/basic/FatEasterCat.glb";
     const MYSTERY_CAT_GLB_PATH = "./assets/creatures/omniversal/MysteryCat.glb";
     const gltfLoader = new GLTFLoader();
-    let basicBlockModelTemplate = null;
-    let basicBlockModelLoadStarted = false;
-    const pendingBasicBlockHosts = new Set();
+    const blockModelStateByRank = Object.fromEntries(
+      Object.entries(BLOCK_GLB_PATH_BY_RANK).map(([rankKey, path]) => [
+        rankKey,
+        { rankKey, path, template: null, loadStarted: false, pending: new Set() }
+      ])
+    );
     let fatCatModelTemplate = null;
     let fatCatModelLoadStarted = false;
     const pendingFatCatCreatureGroups = new Set();
@@ -2567,27 +2581,28 @@
       return bestAvailableLuckySelection().key;
     }
 
-    function enableBasicBlockFallback(host) {
+    function enableRankBlockFallback(host) {
       if (!host || !host.material) return;
       host.material.transparent = false;
       host.material.opacity = 1;
       host.material.depthWrite = true;
-      host.userData.basicBlockModelActive = false;
-      pendingBasicBlockHosts.delete(host);
-    }
-
-    function clearBasicBlockModelFromHost(host) {
-      if (!host) return;
-      const root = host.userData.basicBlockModelRoot || null;
-      if (root) {
-        host.remove(root);
+      host.userData.rankBlockModelActive = false;
+      for (const state of Object.values(blockModelStateByRank)) {
+        state.pending.delete(host);
       }
-      host.userData.basicBlockModelRoot = null;
-      enableBasicBlockFallback(host);
     }
 
-    function tintBasicBlockModel(host, mutation) {
-      const root = host?.userData?.basicBlockModelRoot;
+    function clearRankBlockModelFromHost(host) {
+      if (!host) return;
+      const root = host.userData.rankBlockModelRoot || null;
+      if (root) host.remove(root);
+      host.userData.rankBlockModelRoot = null;
+      host.userData.rankBlockModelKey = "";
+      enableRankBlockFallback(host);
+    }
+
+    function tintRankBlockModel(host, mutation) {
+      const root = host?.userData?.rankBlockModelRoot;
       if (!root) return;
       const m = normalizeMutation(mutation || "normal");
       root.traverse((node) => {
@@ -2619,16 +2634,25 @@
       });
     }
 
-    function applyBasicBlockModelToHost(host, mutation = "normal") {
+    function applyRankBlockModelToHost(host, rankKey, mutation = "normal") {
       if (!host) return;
-      if (!basicBlockModelTemplate) {
-        pendingBasicBlockHosts.add(host);
+      const key = normalizeBlockKey(rankKey);
+      const state = blockModelStateByRank[key];
+      if (!state || !state.path) {
+        clearRankBlockModelFromHost(host);
         return;
       }
-      pendingBasicBlockHosts.delete(host);
-      let root = host.userData.basicBlockModelRoot || null;
+      if (!state.template) {
+        state.pending.add(host);
+        host.userData.rankBlockModelKey = key;
+        return;
+      }
+      if (host.userData.rankBlockModelRoot && host.userData.rankBlockModelKey !== key) {
+        clearRankBlockModelFromHost(host);
+      }
+      let root = host.userData.rankBlockModelRoot || null;
       if (!root) {
-        root = basicBlockModelTemplate.clone(true);
+        root = state.template.clone(true);
         root.traverse((node) => {
           if (!node?.isMesh) return;
           if (Array.isArray(node.material)) {
@@ -2640,21 +2664,24 @@
           node.receiveShadow = true;
         });
         host.add(root);
-        host.userData.basicBlockModelRoot = root;
+        host.userData.rankBlockModelRoot = root;
       }
+      host.userData.rankBlockModelKey = key;
       if (host.material) {
         host.material.transparent = true;
         host.material.opacity = 0;
         host.material.depthWrite = false;
       }
-      host.userData.basicBlockModelActive = true;
-      tintBasicBlockModel(host, mutation);
+      host.userData.rankBlockModelActive = true;
+      tintRankBlockModel(host, mutation);
     }
 
-    function loadBasicBlockModel() {
-      if (basicBlockModelLoadStarted) return;
-      basicBlockModelLoadStarted = true;
-      gltfLoader.load(BASIC_BLOCK_GLB_PATH, (gltf) => {
+    function loadRankBlockModel(rankKey) {
+      const key = normalizeBlockKey(rankKey);
+      const state = blockModelStateByRank[key];
+      if (!state || !state.path || state.loadStarted) return;
+      state.loadStarted = true;
+      gltfLoader.load(state.path, (gltf) => {
         const root = gltf?.scene;
         if (!root) return;
         const box = new THREE.Box3().setFromObject(root);
@@ -2671,18 +2698,24 @@
           node.castShadow = true;
           node.receiveShadow = true;
         });
-        basicBlockModelTemplate = root;
-        const pending = [...pendingBasicBlockHosts];
-        pendingBasicBlockHosts.clear();
+        state.template = root;
+        const pending = [...state.pending];
+        state.pending.clear();
         for (const host of pending) {
           if (!host?.parent) continue;
-          applyBasicBlockModelToHost(host, normalizeMutation(host.userData.blockMutation || "normal"));
+          applyRankBlockModelToHost(host, key, normalizeMutation(host.userData.blockMutation || "normal"));
         }
       }, undefined, (err) => {
-        console.warn("Failed to load BasicBlock.glb", err);
-        for (const host of pendingBasicBlockHosts) enableBasicBlockFallback(host);
-        pendingBasicBlockHosts.clear();
+        console.warn(`Failed to load ${key} block model`, err);
+        for (const host of state.pending) enableRankBlockFallback(host);
+        state.pending.clear();
       });
+    }
+
+    function loadConfiguredBlockModels() {
+      for (const rankKey of Object.keys(blockModelStateByRank)) {
+        loadRankBlockModel(rankKey);
+      }
     }
 
     function normalizeCreatureNameKey(name) {
@@ -2870,12 +2903,13 @@
         };
       }
       const fx = rankFxProfile(blockMeta.rankForFx);
+      const isCommon = normalizeBlockKey(blockMeta.rankForFx) === "common";
       return {
         color: fx.base,
         emissive: fx.emissive,
         emissiveIntensity: Math.max(0.2, fx.intensity + 0.3),
         dynamic: fx.dynamic || "",
-        particleColor: fx.particleColor || fx.emissive
+        particleColor: isCommon ? 0x4dff7d : (fx.particleColor || fx.emissive)
       };
     }
 
@@ -2902,12 +2936,9 @@
       pedestal.block.userData.particleColor = mat.particleColor;
       const i = Math.max(0, RANKS.findIndex((r) => r.key === blockMetaByKey(pedestal.blockRankKey).rankForFx));
       pedestal.block.scale.setScalar(1 + i * 0.015);
-      if (normalizeBlockKey(pedestal.blockRankKey) === "basic") {
-        applyBasicBlockModelToHost(pedestal.block, mutation);
-      } else {
-        clearBasicBlockModelFromHost(pedestal.block);
-      }
       const blockMeta = blockMetaByKey(pedestal.blockRankKey);
+      const modelRankKey = normalizeBlockKey(blockMeta.rankForFx || pedestal.blockRankKey || "basic");
+      applyRankBlockModelToHost(pedestal.block, modelRankKey, mutation);
       if (mutation !== "normal") {
         setMeshLabel(pedestal.block, `${blockMeta.label}`, "Lucky Block", mutationBadge(mutation), mutationTint(mutation));
       } else {
@@ -4933,7 +4964,7 @@
               block.material.emissiveIntensity = 0.66;
             }
             block.userData.blockMutation = blockMutation;
-            if (blockKey === "basic") applyBasicBlockModelToHost(block, blockMutation);
+            applyRankBlockModelToHost(block, normalizeBlockKey(blockMeta.rankForFx || blockKey || "basic"), blockMutation);
             block.position.set(pos.x, 1.1, pos.z);
             block.castShadow = true;
             setMeshLabel(block, blockMeta.label, "Lucky Block", blockMutation === "normal" ? "" : mutationBadge(blockMutation), mutationTint(blockMutation));
@@ -6051,6 +6082,23 @@
       ensureBarnFloors(1);
     }
 
+    function creatureArchetypeFromName(creatureName = "") {
+      const key = normalizeCreatureNameKey(creatureName);
+      if (!key) return "beast";
+      if (key === "littleballoffury") return "ball";
+      if (key.includes("dragon") || key.includes("hydra") || key.includes("serpent")) return "dragon";
+      if (key.includes("whale")) return "whale";
+      if (key.includes("cat") || key.includes("panther") || key.includes("tiger") || key.includes("lion") || key.includes("sphinx")) return "feline";
+      if (key.includes("fox") || key.includes("wolf") || key.includes("pup")) return "canid";
+      if (key.includes("owl") || key.includes("griffin") || key.includes("phoenix") || key.includes("chick")) return "bird";
+      if (key.includes("turtle")) return "turtle";
+      if (key.includes("toad")) return "toad";
+      if (key.includes("slime")) return "slime";
+      if (key.includes("kraken")) return "kraken";
+      if (key.includes("goblin")) return "goblin";
+      return "beast";
+    }
+
     function createCreatureMesh(rankKey, creatureName = "") {
       const fx = rankFxProfile(rankKey);
       const g = new THREE.Group();
@@ -6061,28 +6109,145 @@
         roughness: 0.45,
         metalness: 0.18
       });
-      const body = new THREE.Mesh(
-        new THREE.SphereGeometry(0.45, 12, 10),
-        bodyMat
-      );
-      body.castShadow = true;
-      g.add(body);
+      const detailMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(fx.base).multiplyScalar(0.78),
+        emissive: new THREE.Color(fx.emissive).multiplyScalar(0.42),
+        emissiveIntensity: Math.max(0.08, fx.intensity * 0.45),
+        roughness: 0.5,
+        metalness: 0.12
+      });
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x10131b, roughness: 0.32, metalness: 0.03 });
+      const shellMeshes = [];
 
-      const eyeL = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0x0f0f16 })
-      );
-      eyeL.position.set(-0.12, 0.05, 0.39);
-      g.add(eyeL);
+      function addPart(geometry, material, pos, rot = [0, 0, 0], scale = [1, 1, 1]) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(pos[0], pos[1], pos[2]);
+        mesh.rotation.set(rot[0], rot[1], rot[2]);
+        mesh.scale.set(scale[0], scale[1], scale[2]);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        g.add(mesh);
+        shellMeshes.push(mesh);
+        return mesh;
+      }
 
-      const eyeR = eyeL.clone();
-      eyeR.position.x = 0.12;
-      g.add(eyeR);
+      function addEyes(y = 0.08, z = 0.46, sep = 0.1, size = 0.07) {
+        addPart(new THREE.BoxGeometry(size, size, size * 0.9), eyeMat, [-sep, y, z]);
+        addPart(new THREE.BoxGeometry(size, size, size * 0.9), eyeMat, [sep, y, z]);
+      }
+
+      const archetype = creatureArchetypeFromName(creatureName);
+      const isBallCreature = archetype === "ball";
+
+      if (archetype === "feline") {
+        addPart(new THREE.BoxGeometry(0.64, 0.34, 0.8), bodyMat, [0, 0.03, 0]);
+        addPart(new THREE.BoxGeometry(0.38, 0.3, 0.34), bodyMat, [0, 0.11, 0.48]);
+        addPart(new THREE.ConeGeometry(0.08, 0.16, 6), detailMat, [-0.12, 0.29, 0.51]);
+        addPart(new THREE.ConeGeometry(0.08, 0.16, 6), detailMat, [0.12, 0.29, 0.51]);
+        addPart(new THREE.CylinderGeometry(0.04, 0.055, 0.36, 7), detailMat, [0, 0.03, -0.48], [1.1, 0, 0]);
+        addEyes(0.1, 0.66, 0.1, 0.07);
+      } else if (archetype === "canid") {
+        addPart(new THREE.BoxGeometry(0.66, 0.34, 0.82), bodyMat, [0, 0.03, 0]);
+        addPart(new THREE.BoxGeometry(0.36, 0.26, 0.3), bodyMat, [0, 0.08, 0.5]);
+        addPart(new THREE.ConeGeometry(0.08, 0.2, 7), detailMat, [0, 0.04, 0.72], [Math.PI / 2, 0, 0]);
+        addPart(new THREE.ConeGeometry(0.075, 0.16, 6), detailMat, [-0.11, 0.24, 0.53]);
+        addPart(new THREE.ConeGeometry(0.075, 0.16, 6), detailMat, [0.11, 0.24, 0.53]);
+        addPart(new THREE.CylinderGeometry(0.035, 0.05, 0.34, 7), detailMat, [0, 0.05, -0.49], [0.95, 0, 0]);
+        addEyes(0.09, 0.61, 0.1, 0.07);
+      } else if (archetype === "bird") {
+        addPart(new THREE.BoxGeometry(0.54, 0.4, 0.56), bodyMat, [0, 0.05, 0.03]);
+        addPart(new THREE.BoxGeometry(0.22, 0.2, 0.2), bodyMat, [0, 0.14, 0.36]);
+        addPart(new THREE.ConeGeometry(0.075, 0.2, 7), detailMat, [0, 0.08, 0.56], [Math.PI / 2, 0, 0]);
+        addPart(new THREE.BoxGeometry(0.16, 0.04, 0.34), detailMat, [-0.35, 0.03, 0.02], [0, 0, 0.45]);
+        addPart(new THREE.BoxGeometry(0.16, 0.04, 0.34), detailMat, [0.35, 0.03, 0.02], [0, 0, -0.45]);
+        addPart(new THREE.ConeGeometry(0.06, 0.14, 6), detailMat, [0, 0.31, 0.34]);
+        addEyes(0.13, 0.47, 0.07, 0.06);
+      } else if (archetype === "dragon") {
+        addPart(new THREE.BoxGeometry(0.62, 0.34, 1.0), bodyMat, [0, 0.03, 0]);
+        addPart(new THREE.BoxGeometry(0.36, 0.28, 0.34), bodyMat, [0, 0.09, 0.67]);
+        addPart(new THREE.ConeGeometry(0.08, 0.22, 7), detailMat, [0, 0.03, 0.9], [Math.PI / 2, 0, 0]);
+        addPart(new THREE.ConeGeometry(0.08, 0.2, 6), detailMat, [-0.16, 0.2, 0.7], [0.2, 0, 0]);
+        addPart(new THREE.ConeGeometry(0.08, 0.2, 6), detailMat, [0.16, 0.2, 0.7], [0.2, 0, 0]);
+        addPart(new THREE.BoxGeometry(0.45, 0.05, 0.34), detailMat, [-0.46, 0.2, 0.12], [0, 0, 0.55]);
+        addPart(new THREE.BoxGeometry(0.45, 0.05, 0.34), detailMat, [0.46, 0.2, 0.12], [0, 0, -0.55]);
+        addPart(new THREE.ConeGeometry(0.055, 0.34, 7), detailMat, [0, 0.03, -0.72], [-Math.PI / 2, 0, 0]);
+        for (let i = 0; i < 3; i += 1) {
+          addPart(new THREE.ConeGeometry(0.04, 0.12, 6), detailMat, [0, 0.22, -0.2 + i * 0.26]);
+        }
+        addEyes(0.11, 0.78, 0.1, 0.065);
+      } else if (archetype === "whale") {
+        addPart(new THREE.BoxGeometry(0.74, 0.34, 1.02), bodyMat, [0, 0.02, 0]);
+        addPart(new THREE.BoxGeometry(0.48, 0.24, 0.34), bodyMat, [0, 0.08, 0.59]);
+        addPart(new THREE.BoxGeometry(0.2, 0.06, 0.26), detailMat, [0, 0.22, -0.08]);
+        addPart(new THREE.BoxGeometry(0.14, 0.05, 0.32), detailMat, [-0.45, -0.01, -0.02], [0, 0, 0.3]);
+        addPart(new THREE.BoxGeometry(0.14, 0.05, 0.32), detailMat, [0.45, -0.01, -0.02], [0, 0, -0.3]);
+        addPart(new THREE.BoxGeometry(0.24, 0.04, 0.24), detailMat, [0, 0.01, -0.65], [0.5, 0, 0]);
+        addEyes(0.1, 0.73, 0.11, 0.06);
+      } else if (archetype === "turtle") {
+        addPart(new THREE.CylinderGeometry(0.42, 0.46, 0.26, 8), bodyMat, [0, 0.08, 0], [0, 0, Math.PI / 2], [1, 1, 1.25]);
+        addPart(new THREE.BoxGeometry(0.46, 0.14, 0.56), detailMat, [0, -0.02, -0.02]);
+        addPart(new THREE.BoxGeometry(0.2, 0.12, 0.2), detailMat, [0, 0.01, 0.46]);
+        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
+        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
+        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
+        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
+        addEyes(0.06, 0.54, 0.07, 0.055);
+      } else if (archetype === "toad") {
+        addPart(new THREE.BoxGeometry(0.62, 0.22, 0.56), bodyMat, [0, 0.01, 0]);
+        addPart(new THREE.BoxGeometry(0.42, 0.16, 0.24), bodyMat, [0, 0.11, 0.22]);
+        addPart(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 6), detailMat, [-0.12, 0.2, 0.28]);
+        addPart(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 6), detailMat, [0.12, 0.2, 0.28]);
+        addPart(new THREE.BoxGeometry(0.16, 0.06, 0.24), detailMat, [-0.22, -0.03, -0.23], [0.35, 0, 0]);
+        addPart(new THREE.BoxGeometry(0.16, 0.06, 0.24), detailMat, [0.22, -0.03, -0.23], [0.35, 0, 0]);
+        addEyes(0.23, 0.28, 0.12, 0.055);
+      } else if (archetype === "slime") {
+        addPart(new THREE.CylinderGeometry(0.5, 0.56, 0.28, 8), bodyMat, [0, -0.04, 0], [0, 0.2, 0]);
+        addPart(new THREE.CylinderGeometry(0.38, 0.48, 0.24, 8), bodyMat, [0, 0.16, 0], [0, -0.2, 0]);
+        addPart(new THREE.ConeGeometry(0.08, 0.14, 6), detailMat, [0.22, 0.22, 0.08]);
+        addPart(new THREE.ConeGeometry(0.05, 0.1, 6), detailMat, [-0.2, 0.2, -0.09]);
+        addEyes(0.1, 0.3, 0.09, 0.06);
+      } else if (archetype === "kraken") {
+        addPart(new THREE.BoxGeometry(0.52, 0.42, 0.52), bodyMat, [0, 0.12, 0]);
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2;
+          addPart(
+            new THREE.CylinderGeometry(0.04, 0.06, 0.34, 6),
+            detailMat,
+            [Math.cos(a) * 0.22, -0.12, Math.sin(a) * 0.22],
+            [0.25, 0, -a]
+          );
+        }
+        addEyes(0.14, 0.3, 0.1, 0.065);
+      } else if (archetype === "goblin") {
+        addPart(new THREE.BoxGeometry(0.56, 0.36, 0.48), bodyMat, [0, 0.05, 0]);
+        addPart(new THREE.BoxGeometry(0.36, 0.24, 0.3), bodyMat, [0, 0.17, 0.28]);
+        addPart(new THREE.ConeGeometry(0.08, 0.2, 6), detailMat, [-0.22, 0.2, 0.26], [0, 0, Math.PI / 2]);
+        addPart(new THREE.ConeGeometry(0.08, 0.2, 6), detailMat, [0.22, 0.2, 0.26], [0, 0, -Math.PI / 2]);
+        addEyes(0.16, 0.44, 0.09, 0.06);
+      } else if (isBallCreature) {
+        addPart(new THREE.SphereGeometry(0.46, 14, 12), bodyMat, [0, 0.06, 0]);
+        for (let i = 0; i < 8; i += 1) {
+          const a = (i / 8) * Math.PI * 2;
+          addPart(
+            new THREE.ConeGeometry(0.04, 0.13, 6),
+            detailMat,
+            [Math.cos(a) * 0.28, 0.2 + Math.sin(i * 1.7) * 0.03, Math.sin(a) * 0.28],
+            [Math.PI / 2, a, 0]
+          );
+        }
+        addEyes(0.11, 0.39, 0.1, 0.07);
+      } else {
+        addPart(new THREE.BoxGeometry(0.6, 0.36, 0.66), bodyMat, [0, 0.04, 0]);
+        addPart(new THREE.BoxGeometry(0.34, 0.24, 0.3), bodyMat, [0, 0.12, 0.4]);
+        addPart(new THREE.ConeGeometry(0.07, 0.14, 6), detailMat, [-0.14, 0.23, 0.4]);
+        addPart(new THREE.ConeGeometry(0.07, 0.14, 6), detailMat, [0.14, 0.23, 0.4]);
+        addEyes(0.12, 0.54, 0.09, 0.065);
+      }
 
       let aura = null;
       if (fx.auraOpacity > 0) {
         aura = new THREE.Mesh(
-          new THREE.SphereGeometry(0.6, 14, 12),
+          isBallCreature ? new THREE.SphereGeometry(0.62, 14, 12) : new THREE.TorusGeometry(0.5, 0.07, 10, 22),
           new THREE.MeshBasicMaterial({
             color: fx.aura,
             transparent: true,
@@ -6091,13 +6256,14 @@
             blending: THREE.AdditiveBlending
           })
         );
+        if (!isBallCreature) aura.rotation.x = Math.PI / 2;
         g.add(aura);
       }
 
       let outline = null;
       if (fx.outline) {
         outline = new THREE.Mesh(
-          new THREE.SphereGeometry(0.51, 10, 9),
+          isBallCreature ? new THREE.SphereGeometry(0.52, 10, 9) : new THREE.BoxGeometry(0.86, 0.66, 0.94),
           new THREE.MeshBasicMaterial({
             color: fx.outline,
             side: THREE.BackSide,
@@ -6133,7 +6299,7 @@
         aura,
         outline,
         particles,
-        shellMeshes: [body, eyeL, eyeR]
+        shellMeshes
       };
       if (isFatCatCreatureName(creatureName)) {
         clearMysteryCatModelFromCreatureGroup(g);
@@ -6672,7 +6838,9 @@
       for (let i = 0; i < pedestals.length; i += 1) {
         const p = pedestals[i];
         if (!p.hasBlock && p.openingUntil <= now) {
-          if (p.block?.userData?.basicBlockModelActive) clearBasicBlockModelFromHost(p.block);
+          if (p.block?.userData?.rankBlockModelActive || p.block?.userData?.rankBlockModelRoot) {
+            clearRankBlockModelFromHost(p.block);
+          }
           continue;
         }
         const idx = Math.max(0, RANKS.findIndex((r) => r.key === (p.blockRankKey || "basic")));
@@ -7775,7 +7943,7 @@
 
     function init() {
       registerPwaServiceWorker();
-      loadBasicBlockModel();
+      loadConfiguredBlockModels();
       loadFatCatModel();
       loadMysteryCatModel();
       buildGround();

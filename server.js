@@ -79,7 +79,7 @@ const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Shadow Panther", rankKey: "epic", rate: 295 },
   { name: "Golden Griffin", rankKey: "legendary", rate: 640 },
   { name: "Crystal Wolf", rankKey: "legendary", rate: 780 },
-  { name: "Phoenix Chick", rankKey: "legendary", rate: 890 },
+  { name: "Little ball of fury", rankKey: "legendary", rate: 700 },
   { name: "Celestial Cat", rankKey: "mythic", rate: 2100 },
   { name: "Moon Serpent", rankKey: "mythic", rate: 2550 },
   { name: "Starry Elk", rankKey: "mythic", rate: 2980 },
