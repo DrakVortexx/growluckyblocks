@@ -493,12 +493,6 @@ function normalizeBatKey(v) {
   return BAT_DEFS[raw] ? raw : "sprout";
 }
 
-function normalizeGender(v) {
-  const raw = String(v || "").trim().toLowerCase();
-  if (raw === "female" || raw === "f") return "female";
-  return "male";
-}
-
 function getStealTimeForRank(rankKey) {
   void rankKey;
   return 2;
@@ -1305,16 +1299,7 @@ function worldPayload(serverState) {
         const p = serverState.activePositions.get(playerId) || { x: slot * 26, z: 11, yaw: 0 };
         const profile = serverState.activeProfiles.get(playerId) || {};
         const tag = profile.username ? String(profile.username) : playerTag(playerId);
-        return {
-          playerId,
-          slot,
-          tag,
-          x: p.x,
-          z: p.z,
-          yaw: p.yaw,
-          username: profile.username || "",
-          gender: normalizeGender(profile.gender || "male")
-        };
+        return { playerId, slot, tag, x: p.x, z: p.z, yaw: p.yaw, username: profile.username || "" };
       })
   };
 }
@@ -2106,8 +2091,7 @@ app.post("/api/auth/profile", async (req, res) => {
       }
     }
 
-    const requestedGender = normalizeGender(req.body?.gender || existing?.profile?.gender || "male");
-    const profilePatch = { ...(existing.profile || {}), email, gender: requestedGender, updatedAt: Date.now() };
+    const profilePatch = { ...(existing.profile || {}), email, updatedAt: Date.now() };
     if (desiredUsername) {
       profilePatch.username = desiredUsername;
       profilePatch.usernameLower = usernameKey(desiredUsername);
@@ -2304,25 +2288,15 @@ app.post("/api/join", async (req, res) => {
       existingRaw = null;
     }
     const existing = ensurePlayerDataShape(existingRaw, 0);
-    if (!existing.profile || typeof existing.profile !== "object") existing.profile = {};
-    existing.profile.gender = normalizeGender(existing.profile.gender || "male");
     let profilePatch = null;
     if (incomingProfile) {
       const incomingUsername = String(incomingProfile.username || "").replace(/[^a-zA-Z0-9_ -]/g, "").slice(0, 24);
       const incomingEmail = String(incomingProfile.email || "");
-      const incomingGender = normalizeGender(incomingProfile.gender || existing?.profile?.gender || "male");
       if (!existing.profile || !existing.profile.username || incomingUsername) {
         existing.profile = {
           ...(existing.profile || {}),
           username: incomingUsername || String(existing.profile?.username || "").slice(0, 24),
-          email: incomingEmail || String(existing.profile?.email || ""),
-          gender: incomingGender
-        };
-        profilePatch = existing.profile;
-      } else if (!existing.profile.gender || incomingProfile.gender) {
-        existing.profile = {
-          ...(existing.profile || {}),
-          gender: incomingGender
+          email: incomingEmail || String(existing.profile?.email || "")
         };
         profilePatch = existing.profile;
       }
@@ -2537,7 +2511,6 @@ app.get("/api/players", async (req, res) => {
       playerId: p.playerId,
       slot: p.slot,
       tag: p.tag,
-      gender: normalizeGender(p.gender || "male"),
       x: p.x,
       z: p.z,
       yaw: p.yaw,
