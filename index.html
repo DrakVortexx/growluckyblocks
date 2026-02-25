@@ -2109,7 +2109,7 @@
       spawnDrops: [],
       baseLocks: {},
       remoteSnapshots: {},
-      profile: { username: "", email: "" },
+      profile: { username: "", email: "", gender: "male" },
       isAdmin: false,
       chatMessages: []
     };
@@ -2178,6 +2178,11 @@
     function normalizeBatKey(v) {
       const raw = String(v || "").trim().toLowerCase();
       return BAT_DEFS.some((b) => b.key === raw) ? raw : "sprout";
+    }
+
+    function normalizeProfileGender(v) {
+      const raw = String(v || "").trim().toLowerCase();
+      return raw === "female" ? "female" : "male";
     }
 
     function getBatDef(v) {
@@ -4480,15 +4485,19 @@
       return authToken;
     }
 
-    async function syncProfileToken(user, username = "") {
+    async function syncProfileToken(user, username = "", gender = null) {
       try {
-        const data = await apiJsonAuth("/api/auth/profile", "POST", { username, playerId: user?.uid || "" }, true);
+        const payload = { username, playerId: user?.uid || "" };
+        if (gender !== null && gender !== undefined) payload.gender = normalizeProfileGender(gender);
+        const data = await apiJsonAuth("/api/auth/profile", "POST", payload, true);
         if (data?.profile && typeof data.profile === "object") {
           multiplayer.profile.username = String(data.profile.username || "");
           multiplayer.profile.email = String(data.profile.email || user.email || "");
+          multiplayer.profile.gender = normalizeProfileGender(data.profile.gender || multiplayer.profile.gender || "male");
         } else {
           multiplayer.profile.username = multiplayer.profile.username || "";
           multiplayer.profile.email = String(user.email || "");
+          multiplayer.profile.gender = normalizeProfileGender(multiplayer.profile.gender || "male");
         }
         multiplayer.isAdmin = !!data?.isAdmin;
         return data;
@@ -4497,9 +4506,29 @@
         // profile sync failure is non-fatal for gameplay
         authToken = "";
         multiplayer.profile.email = String(user?.email || "");
+        multiplayer.profile.gender = normalizeProfileGender(multiplayer.profile.gender || "male");
         multiplayer.isAdmin = false;
         return null;
       }
+    }
+
+    async function setProfileGender(gender) {
+      const nextGender = normalizeProfileGender(gender);
+      if (normalizeProfileGender(multiplayer.profile.gender || "male") === nextGender) {
+        state.info = `Gender already set to ${nextGender}.`;
+        updateUI();
+        return;
+      }
+      const user = auth.currentUser;
+      if (!user) return;
+      try {
+        await syncProfileToken({ email: user.email, uid: user.uid }, "", nextGender);
+        state.info = `Avatar updated: ${nextGender}.`;
+      } catch {
+        state.info = "Could not update gender right now.";
+      }
+      renderShop();
+      updateUI();
     }
 
     async function submitAuth() {
@@ -5099,6 +5128,75 @@
       }
     }
 
+    function createRemoteAvatarGroup(playerMeta) {
+      const gender = normalizeProfileGender(playerMeta?.gender || "male");
+      const g = new THREE.Group();
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf0c8a2, roughness: 0.72, metalness: 0.02 });
+      const clothMat = new THREE.MeshStandardMaterial({ color: gender === "female" ? 0x4f79cc : 0x5a86b8, roughness: 0.64, metalness: 0.05 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x34445d, roughness: 0.7, metalness: 0.04 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x6a3f21, roughness: 0.62, metalness: 0.05 });
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.66, 0.28), clothMat);
+      torso.position.y = 0.95;
+      torso.castShadow = true;
+      g.add(torso);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.34, 0.34), skinMat);
+      head.position.y = 1.48;
+      head.castShadow = true;
+      g.add(head);
+
+      const armL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.56, 0.12), clothMat);
+      armL.position.set(-0.34, 0.93, 0);
+      armL.castShadow = true;
+      g.add(armL);
+      const armR = armL.clone();
+      armR.position.x = 0.34;
+      g.add(armR);
+
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.6, 0.16), pantsMat);
+      legL.position.set(-0.13, 0.38, 0);
+      legL.castShadow = true;
+      g.add(legL);
+      const legR = legL.clone();
+      legR.position.x = 0.13;
+      g.add(legR);
+
+      const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.38), hairMat);
+      hairTop.position.set(0, 1.63, 0);
+      hairTop.castShadow = true;
+      g.add(hairTop);
+
+      const hairBack = new THREE.Mesh(
+        new THREE.BoxGeometry(0.36, gender === "female" ? 0.42 : 0.2, 0.12),
+        hairMat
+      );
+      hairBack.position.set(0, gender === "female" ? 1.43 : 1.52, -0.18);
+      hairBack.castShadow = true;
+      g.add(hairBack);
+
+      if (gender === "female") {
+        const sideHairL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), hairMat);
+        sideHairL.position.set(-0.2, 1.42, 0.08);
+        sideHairL.castShadow = true;
+        g.add(sideHairL);
+        const sideHairR = sideHairL.clone();
+        sideHairR.position.x = 0.2;
+        g.add(sideHairR);
+      }
+
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1f1f1f, roughness: 0.45 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), eyeMat);
+      eyeL.position.set(-0.075, 1.49, 0.18);
+      g.add(eyeL);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.075;
+      g.add(eyeR);
+
+      g.userData.avatarGender = gender;
+      return g;
+    }
+
     function renderRemoteFields() {
       renderWorldSpawnDrops();
       const remotePlayers = (multiplayer.players || []).filter((p) => String(p?.playerId || "") !== String(multiplayer.playerId || ""));
@@ -5306,12 +5404,8 @@
         const x = Number.isFinite(p.x) ? p.x : slotOffsetX(p.slot || 0);
         const z = Number.isFinite(p.z) ? p.z : 11;
         const playerName = String(p.tag || playerTag(p.playerId || "player"));
-        const avatar = new THREE.Mesh(
-          new THREE.BoxGeometry(0.72, 1.7, 0.52),
-          new THREE.MeshStandardMaterial({ color: 0x7a4b2e, roughness: 0.72, metalness: 0.05 })
-        );
-        avatar.position.set(x, 0.86, z);
-        avatar.castShadow = true;
+        const avatar = createRemoteAvatarGroup(p);
+        avatar.position.set(x, 0, z);
         setMeshLabel(avatar, playerName, "Player");
         scene.add(avatar);
         remoteAvatarMeshes.push(avatar);
@@ -7685,6 +7779,25 @@
       const personalUnlockMode = targetLuck > personalLuckUnlocked;
       const personalApplyMode = !personalUnlockMode && targetLuck !== personalLuck;
       const effectiveLuck = Math.max(1, Number(multiplayer.serverLuck || 1) * personalLuck);
+      const profileGender = normalizeProfileGender(multiplayer.profile.gender || "male");
+      const showCosmeticsFocus = shopMode === "cosmetics";
+      const cosmeticsCard = `
+        <div class="shopSectionLabel" style="margin-top:2px">${showCosmeticsFocus ? "COSMETICS" : "AVATAR"}</div>
+        <div class="shopOfferGrid">
+          <div class="shopOfferCard luck">
+            <div class="shopOfferTitle">CHARACTER</div>
+            <div class="shopOfferSub">Brown hair is default. Female uses longer hair length.</div>
+            <div class="shopOdds">
+              <span>Current gender: ${profileGender}</span>
+              <span>Applied to all servers</span>
+            </div>
+            <div class="shopOdds">
+              <button id="cosGenderMale" class="shopPriceBtn"${profileGender === "male" ? " disabled" : ""}>Set Male</button>
+              <button id="cosGenderFemale" class="shopPriceBtn"${profileGender === "female" ? " disabled" : ""}>Set Female</button>
+            </div>
+          </div>
+        </div>
+      `;
 
       coreButtonsEl.innerHTML = `
         <div class="shopTabs">
@@ -7694,6 +7807,7 @@
           <div class="shopTab money">MONEY</div>
           <div class="shopTab close" id="shopCloseTab">X</div>
         </div>
+        ${cosmeticsCard}
 
         <div class="shopSectionLabel">LUCKY BLOCKS</div>
         <div class="shopOfferGrid">
@@ -7804,6 +7918,8 @@
       `;
 
       document.getElementById("shopCloseTab")?.addEventListener("click", () => toggleShop(false));
+      document.getElementById("cosGenderMale")?.addEventListener("click", () => { void setProfileGender("male"); });
+      document.getElementById("cosGenderFemale")?.addEventListener("click", () => { void setProfileGender("female"); });
       document.getElementById("shopBuySeedPack")?.addEventListener("click", () => {
         buyItem(seedPrice, seedPack.buy);
         renderShop();
@@ -8939,7 +9055,8 @@
           serverId: multiplayer.serverId,
           profile: {
             username: multiplayer.profile.username || "",
-            email: multiplayer.profile.email || ""
+            email: multiplayer.profile.email || "",
+            gender: normalizeProfileGender(multiplayer.profile.gender || "male")
           }
         });
         if (typeof joined.slot === "number") multiplayer.slot = joined.slot;
@@ -8966,6 +9083,7 @@
         if (joined.profile && typeof joined.profile === "object") {
           multiplayer.profile.username = String(joined.profile.username || multiplayer.profile.username || "");
           multiplayer.profile.email = String(joined.profile.email || multiplayer.profile.email || "");
+          multiplayer.profile.gender = normalizeProfileGender(joined.profile.gender || multiplayer.profile.gender || "male");
         }
         if (typeof joined.isAdmin === "boolean") multiplayer.isAdmin = joined.isAdmin;
         if (!multiplayer.isAdmin) adminPanelEl.classList.remove("open");
@@ -9124,6 +9242,7 @@
         try { localStorage.removeItem(SESSION_HINT_KEY); } catch {}
         authToken = "";
         multiplayer.profile = { username: "", email: "" };
+        multiplayer.profile.gender = "male";
         multiplayer.isAdmin = false;
         multiplayer.chatMessages = [];
         multiplayer.remoteSnapshots = {};
