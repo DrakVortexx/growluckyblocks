@@ -31,6 +31,8 @@ const DAILY_STARDUST_LOOP = [
   { day: 6, stardust: 60, luckyRankKey: "mythic" },
   { day: 7, stardust: 100, luckyRankKey: "secret" }
 ];
+const BASE_LOCK_BASE_SEC = 60;
+const BASE_LOCK_PER_REBIRTH_SEC = 10;
 const STEAL_TIME_BY_RANK = Object.freeze({
   basic: 4,
   common: 6,
@@ -492,8 +494,8 @@ function normalizeBatKey(v) {
 }
 
 function getStealTimeForRank(rankKey) {
-  const key = normalizeRankKey(rankKey);
-  return Math.max(2, Number(STEAL_TIME_BY_RANK[key] || STEAL_TIME_BY_RANK.basic || 2));
+  void rankKey;
+  return 2;
 }
 
 function pedestalPositionForSlot(slot, pedestalIndex) {
@@ -797,6 +799,7 @@ function ensureServerState(serverId, opts = {}) {
     whitelistPlayerIds: new Set(),
     whitelistUsernames: new Set(),
     recentlyStolenByPlayer: new Map(),
+    baseLockUntilByPlayer: new Map(),
     stealTickBusy: false
   };
   serverStates.set(id, state);
@@ -1243,6 +1246,41 @@ function addSpawnDrop(serverState, creatureSpec, mutation = "normal") {
   return normalizeSpawnDrop(drop);
 }
 
+function getBaseLockUntil(serverState, playerId, nowSec = Date.now() / 1000) {
+  if (!serverState || !(serverState.baseLockUntilByPlayer instanceof Map)) return 0;
+  const pid = String(playerId || "");
+  if (!pid) return 0;
+  const until = Number(serverState.baseLockUntilByPlayer.get(pid) || 0);
+  if (until > nowSec) return until;
+  if (until > 0) serverState.baseLockUntilByPlayer.delete(pid);
+  return 0;
+}
+
+function pruneBaseLocks(serverState, nowSec = Date.now() / 1000) {
+  if (!serverState || !(serverState.baseLockUntilByPlayer instanceof Map)) return false;
+  let changed = false;
+  for (const [pid, untilRaw] of serverState.baseLockUntilByPlayer.entries()) {
+    const until = Number(untilRaw || 0);
+    if (until > nowSec) continue;
+    serverState.baseLockUntilByPlayer.delete(pid);
+    changed = true;
+  }
+  return changed;
+}
+
+function listActiveBaseLocks(serverState, nowSec = Date.now() / 1000) {
+  const out = [];
+  if (!serverState || !(serverState.baseLockUntilByPlayer instanceof Map)) return out;
+  for (const [pid, untilRaw] of serverState.baseLockUntilByPlayer.entries()) {
+    const until = Number(untilRaw || 0);
+    if (until <= nowSec) continue;
+    if (serverState.activeSlots instanceof Map && !serverState.activeSlots.has(pid)) continue;
+    out.push({ playerId: String(pid), until });
+  }
+  out.sort((a, b) => Number(a.until || 0) - Number(b.until || 0));
+  return out;
+}
+
 function worldPayload(serverState) {
   return {
     type: "world",
@@ -1251,6 +1289,7 @@ function worldPayload(serverState) {
     forcedBlueMoonUntil: Number(serverState.forcedBlueMoonUntil || 0),
     forcedBlueMoonEventId: String(serverState.forcedBlueMoonEventId || ""),
     spawnDrops: listSpawnDrops(serverState),
+    lockedBases: listActiveBaseLocks(serverState),
     occupiedSlots: [...serverState.activeSlots.values()].sort((a, b) => a - b),
     players: [...serverState.activeSlots.entries()]
       .sort((a, b) => a[1] - b[1])
@@ -1761,17 +1800,24 @@ async function completeSteal(serverState, steal) {
 
 async function processServerSteals(serverState) {
   if (!serverState || serverState.stealTickBusy) return;
-  if (!serverState.activeSteals || serverState.activeSteals.size < 1) return;
+  const nowMs = Date.now();
+  const nowSec = nowMs / 1000;
+  const lockPruned = pruneBaseLocks(serverState, nowSec);
+  if (!serverState.activeSteals || serverState.activeSteals.size < 1) {
+    if (lockPruned) broadcastWorld(serverState);
+    return;
+  }
   serverState.stealTickBusy = true;
   try {
-    const nowMs = Date.now();
-    const nowSec = nowMs / 1000;
     const steals = [...serverState.activeSteals.values()];
     for (const steal of steals) {
       if (!serverState.activeSteals.has(steal.id)) continue;
       const thiefId = String(steal.thiefId || "");
       const ownerId = String(steal.ownerId || "");
       const pedIndex = Number(steal.pedestalIndex || 0);
+      const lastProgressAt = Number(steal.lastProgressAt || steal.startAt || nowMs);
+      const elapsedMs = Math.max(0, nowMs - lastProgressAt);
+      steal.lastProgressAt = nowMs;
       const stunnedUntil = Number(serverState.stunUntilByPlayer.get(thiefId) || 0);
       if (stunnedUntil > nowSec) {
         cancelSteal(serverState, steal, "stunned");
@@ -1779,14 +1825,6 @@ async function processServerSteals(serverState) {
       }
       if (!serverState.activeSlots.has(thiefId) || !serverState.activeSlots.has(ownerId)) {
         cancelSteal(serverState, steal, "offline");
-        continue;
-      }
-
-      const thiefPos = serverState.activePositions.get(thiefId) || null;
-      const ownerSlot = serverState.activeSlots.get(ownerId) ?? 0;
-      const pedPos = pedestalPositionForSlot(ownerSlot, pedIndex);
-      if (!thiefPos || distance2d(thiefPos.x, thiefPos.z, pedPos.x, pedPos.z) > 2.55) {
-        cancelSteal(serverState, steal, "moved");
         continue;
       }
 
@@ -1812,7 +1850,51 @@ async function processServerSteals(serverState) {
         continue;
       }
 
-      if (Number(steal.endAt || 0) <= nowMs) {
+      let pauseReason = "";
+      const ownerLockUntil = getBaseLockUntil(serverState, ownerId, nowSec);
+      if (ownerLockUntil > nowSec) pauseReason = "locked";
+      const thiefPos = serverState.activePositions.get(thiefId) || null;
+      const ownerSlot = serverState.activeSlots.get(ownerId) ?? 0;
+      const pedPos = pedestalPositionForSlot(ownerSlot, pedIndex);
+      if (!thiefPos || distance2d(thiefPos.x, thiefPos.z, pedPos.x, pedPos.z) > 2.55) {
+        pauseReason = "distance";
+      }
+
+      const baseRemainingMs = Number.isFinite(Number(steal.remainingMs))
+        ? Number(steal.remainingMs)
+        : Number(steal.durationSec || 2) * 1000;
+      let remainingMs = Math.max(0, baseRemainingMs);
+      if (!pauseReason) {
+        remainingMs = Math.max(0, remainingMs - elapsedMs);
+      }
+      steal.remainingMs = remainingMs;
+      steal.endAt = nowMs + remainingMs;
+      steal.paused = !!pauseReason;
+      steal.pauseReason = pauseReason;
+
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      const pauseTag = pauseReason || "";
+      const changedProgress = Number(steal.lastNotifyRemainingSec) !== remainingSec
+        || String(steal.lastNotifyPauseReason || "") !== pauseTag;
+      if (changedProgress) {
+        steal.lastNotifyRemainingSec = remainingSec;
+        steal.lastNotifyPauseReason = pauseTag;
+        const progressPayload = {
+          type: "steal-progress",
+          stealId: steal.id,
+          ownerId,
+          thiefId,
+          remainingMs,
+          paused: !!pauseReason,
+          pauseReason,
+          lockRemainingSec: pauseReason === "locked" ? Math.max(0, Math.ceil(ownerLockUntil - nowSec)) : 0,
+          at: nowMs
+        };
+        notifyPlayer(serverState, thiefId, progressPayload);
+        notifyPlayer(serverState, ownerId, progressPayload);
+      }
+
+      if (!pauseReason && remainingMs <= 0) {
         await completeSteal(serverState, steal);
       }
     }
@@ -2256,6 +2338,7 @@ app.post("/api/join", async (req, res) => {
       serverLuck: Number(serverState.serverLuck || 1),
       forcedBlueMoonUntil: Number(serverState.forcedBlueMoonUntil || 0),
       forcedBlueMoonEventId: String(serverState.forcedBlueMoonEventId || ""),
+      baseLockUntil: Number(getBaseLockUntil(serverState, playerId) || 0),
       stunUntil: Number(serverState.stunUntilByPlayer.get(playerId) || 0),
       activeSteal: deepClone(findActiveStealByThief(serverState, playerId) || null),
       carried: carriedPayloadForClient(serverState.carriedByThief.get(playerId) || null),
@@ -2490,6 +2573,14 @@ app.post("/api/steal/start", async (req, res) => {
       res.status(400).json({ error: "too far from target" });
       return;
     }
+    const ownerLockUntil = getBaseLockUntil(serverState, ownerId, nowSec);
+    if (ownerLockUntil > nowSec) {
+      res.status(400).json({
+        error: "target base is locked",
+        lockRemainingSec: Math.max(0, Math.ceil(ownerLockUntil - nowSec))
+      });
+      return;
+    }
 
     const target = resolveStealTargetFromSnapshot(ownerSnap, pedestalIndex);
     if (!target) {
@@ -2514,7 +2605,13 @@ app.post("/api/steal/start", async (req, res) => {
       creatureRate: Number(target.creatureRate || 0),
       durationSec,
       startAt,
-      endAt: startAt + durationSec * 1000
+      endAt: startAt + durationSec * 1000,
+      remainingMs: durationSec * 1000,
+      paused: false,
+      pauseReason: "",
+      lastProgressAt: startAt,
+      lastNotifyRemainingSec: Math.ceil(durationSec),
+      lastNotifyPauseReason: ""
     };
     serverState.activeSteals.set(steal.id, steal);
     notifyPlayer(serverState, playerId, { type: "steal-start", steal });
@@ -2691,6 +2788,60 @@ app.post("/api/steal/cancel", async (req, res) => {
     res.json({ ok: true, canceled: true, stealId: steal.id });
   } catch (err) {
     console.error("/api/steal/cancel failed", err);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+app.post("/api/base/lock", async (req, res) => {
+  try {
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    const playerId = String(req.body?.playerId || "").trim();
+    const serverId = cleanServerId(req.body?.serverId || DEFAULT_SERVER_ID);
+    if (!playerId || playerId !== String(decoded.uid || "")) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const serverState = ensureServerState(serverId, {});
+    if (!serverState.activeSlots.has(playerId)) {
+      res.status(400).json({ error: "player not online in this server" });
+      return;
+    }
+
+    const nowSec = Date.now() / 1000;
+    const currentUntil = getBaseLockUntil(serverState, playerId, nowSec);
+    if (currentUntil > nowSec) {
+      res.status(400).json({
+        error: "base already locked",
+        lockRemainingSec: Math.max(0, Math.ceil(currentUntil - nowSec)),
+        baseLockUntil: currentUntil
+      });
+      return;
+    }
+
+    const playerDoc = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), serverState.activeSlots.get(playerId) ?? 0);
+    const rebirths = Math.max(0, Math.min(MAX_REBIRTHS, Math.floor(Number(playerDoc?.data?.state?.rebirths || 0))));
+    const durationSec = BASE_LOCK_BASE_SEC + rebirths * BASE_LOCK_PER_REBIRTH_SEC;
+    const baseLockUntil = nowSec + durationSec;
+    serverState.baseLockUntilByPlayer.set(playerId, baseLockUntil);
+
+    if (playerDoc?.data?.state && typeof playerDoc.data.state === "object") {
+      playerDoc.data.state.baseLockUntil = baseLockUntil;
+      await setPlayerDocMerge(playerId, { data: playerDoc.data, updatedAt: Date.now() }, decoded);
+    }
+
+    broadcastWorld(serverState);
+    res.json({
+      ok: true,
+      playerId,
+      serverId,
+      rebirths,
+      durationSec,
+      baseLockUntil
+    });
+  } catch (err) {
+    console.error("/api/base/lock failed", err);
     res.status(500).json({ error: "internal error" });
   }
 });

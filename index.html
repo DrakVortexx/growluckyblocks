@@ -2107,6 +2107,7 @@
       ws: null,
       players: [],
       spawnDrops: [],
+      baseLocks: {},
       remoteSnapshots: {},
       profile: { username: "", email: "" },
       isAdmin: false,
@@ -2192,8 +2193,8 @@
     }
 
     function getStealTimeForRank(rankKey) {
-      const key = getRankByKey(rankKey).key;
-      return Math.max(2, Number(STEAL_TIME_BY_RANK[key] || STEAL_TIME_BY_RANK.basic || 2));
+      void rankKey;
+      return 2;
     }
 
     function migrateLegacyRankCounts(rawBucket, targetBucket) {
@@ -2443,7 +2444,11 @@
     let stealStartBusy = false;
     let stealCancelBusy = false;
     let stealDepositBusy = false;
+    let baseLockBusy = false;
     let batHitBusy = false;
+    let baseLockPadMesh = null;
+    let baseLockPadGlow = null;
+    let baseLockPadLabelSig = "";
 
     function creaturePenCenter() {
       return new THREE.Vector3(14 + slotOffsetX(multiplayer.slot), 0, 10);
@@ -5318,6 +5323,63 @@
       return (multiplayer.players || []).find((p) => String(p.playerId || "") === String(playerId || "")) || null;
     }
 
+    function applyLockedBasesFromWorld(list) {
+      const next = {};
+      const now = realNowSec();
+      if (Array.isArray(list)) {
+        for (const row of list) {
+          const pid = String(row?.playerId || "");
+          const until = Number(row?.until || 0);
+          if (!pid || until <= now) continue;
+          next[pid] = until;
+        }
+      }
+      multiplayer.baseLocks = next;
+    }
+
+    function baseLockUntilForPlayer(playerId) {
+      const pid = String(playerId || "");
+      if (!pid) return 0;
+      const until = Number(multiplayer.baseLocks?.[pid] || 0);
+      return Number.isFinite(until) ? until : 0;
+    }
+
+    function ownBaseLockRemainingSec() {
+      const until = baseLockUntilForPlayer(multiplayer.playerId);
+      return Math.max(0, Math.ceil(until - realNowSec()));
+    }
+
+    function ownBaseLockDurationSec() {
+      const rebirths = Math.max(0, Math.floor(Number(state.rebirths || 0)));
+      return 60 + rebirths * 10;
+    }
+
+    function isActiveStealPaused() {
+      return !!(state.activeSteal && state.activeSteal.paused);
+    }
+
+    function updateBaseLockPadVisual() {
+      if (!baseLockPadMesh || !baseLockPadGlow) return;
+      const rem = ownBaseLockRemainingSec();
+      const locked = rem > 0;
+      if (locked) {
+        baseLockPadMesh.material.color.setHex(0xcb3b3b);
+        baseLockPadMesh.material.emissive.setHex(0x5d1111);
+        baseLockPadMesh.material.emissiveIntensity = 0.55;
+        baseLockPadGlow.material.opacity = 0.2 + Math.abs(Math.sin(performance.now() * 0.006)) * 0.22;
+      } else {
+        baseLockPadMesh.material.color.setHex(0x3d7dca);
+        baseLockPadMesh.material.emissive.setHex(0x0d2a4d);
+        baseLockPadMesh.material.emissiveIntensity = 0.35;
+        baseLockPadGlow.material.opacity = 0.15 + Math.abs(Math.sin(performance.now() * 0.004)) * 0.12;
+      }
+      const label = locked ? `LOCKED ${formatNumber(rem)}s` : `LOCK BASE ${formatNumber(ownBaseLockDurationSec())}s`;
+      if (label !== baseLockPadLabelSig) {
+        setMeshLabel(baseLockPadMesh, "Base Lock", label);
+        baseLockPadLabelSig = label;
+      }
+    }
+
     function remoteCreaturePedestalSet(snapshot) {
       const set = new Set();
       for (const c of Array.isArray(snapshot?.creatures) ? snapshot.creatures : []) {
@@ -5341,11 +5403,14 @@
 
     function getClosestStealTarget(maxDistance = 2.45) {
       if (!multiplayer.connected) return null;
+      const nowSec = realNowSec();
       let best = null;
       let bestD = Infinity;
       for (const p of multiplayer.players || []) {
         const ownerId = String(p?.playerId || "");
         if (!ownerId || ownerId === multiplayer.playerId) continue;
+        const ownerLockUntil = baseLockUntilForPlayer(ownerId);
+        const lockRemainingSec = Math.max(0, Math.ceil(ownerLockUntil - nowSec));
         const snapshot = multiplayer.remoteSnapshots?.[ownerId];
         if (!snapshot || typeof snapshot !== "object") continue;
         const slot = Number(p.slot || 0);
@@ -5388,6 +5453,7 @@
             creatureName,
             creatureRate,
             stealSeconds: getStealTimeForRank(blockKey),
+            lockedRemainingSec: lockRemainingSec,
             distance: d,
             x: pos.x,
             z: pos.z
@@ -5406,9 +5472,56 @@
 
     function getStealRemainingSeconds(stealObj) {
       if (!stealObj || typeof stealObj !== "object") return 0;
+      const paused = !!stealObj.paused;
+      if (paused) {
+        const ms = Number(stealObj.remainingMs || 0);
+        return Math.max(0, ms / 1000);
+      }
       const endAt = Number(stealObj.endAt || 0);
       const nowMs = Date.now();
-      return Math.max(0, (endAt - nowMs) / 1000);
+      if (endAt > 0) return Math.max(0, (endAt - nowMs) / 1000);
+      const remainingMs = Number(stealObj.remainingMs || 0);
+      return Math.max(0, remainingMs / 1000);
+    }
+
+    async function activateBaseLock() {
+      if (!multiplayer.connected || !multiplayer.playerId) {
+        state.info = "Join a multiplayer server first.";
+        updateUI();
+        return false;
+      }
+      if (baseLockBusy) return false;
+      const remaining = ownBaseLockRemainingSec();
+      if (remaining > 0) {
+        state.info = `Base already locked for ${formatNumber(remaining)}s.`;
+        updateUI();
+        return false;
+      }
+      baseLockBusy = true;
+      try {
+        const data = await apiJsonAuth("/api/base/lock", "POST", {
+          playerId: multiplayer.playerId,
+          serverId: multiplayer.serverId
+        });
+        const until = Number(data?.baseLockUntil || 0);
+        if (!multiplayer.baseLocks || typeof multiplayer.baseLocks !== "object") multiplayer.baseLocks = {};
+        multiplayer.baseLocks[multiplayer.playerId] = until;
+        const durationSec = Math.max(1, Math.floor(Number(data?.durationSec || ownBaseLockDurationSec())));
+        state.info = `Base locked for ${formatNumber(durationSec)}s.`;
+        updateUI();
+        return true;
+      } catch (err) {
+        const remain = Number(err?.payload?.lockRemainingSec || 0);
+        if (remain > 0) {
+          state.info = `Base already locked for ${formatNumber(remain)}s.`;
+        } else {
+          state.info = String(err?.payload?.error || err?.message || "Could not lock base.");
+        }
+        updateUI();
+      } finally {
+        baseLockBusy = false;
+      }
+      return false;
     }
 
     function normalizeCarriedPayload(raw) {
@@ -5516,6 +5629,11 @@
 
     async function startStealAt(target) {
       if (!target || stealStartBusy || !multiplayer.connected) return false;
+      if (Number(target.lockedRemainingSec || 0) > 0) {
+        state.info = `That base is locked for ${formatNumber(Number(target.lockedRemainingSec || 0))}s.`;
+        updateUI();
+        return false;
+      }
       if (state.carriedSteal) {
         state.info = "Deposit your carried stolen item first.";
         updateUI();
@@ -5536,13 +5654,16 @@
         });
         if (data?.steal) {
           state.activeSteal = data.steal;
+          state.activeSteal.paused = !!state.activeSteal.paused;
+          state.activeSteal.pauseReason = String(state.activeSteal.pauseReason || "");
+          state.activeSteal.remainingMs = Number(state.activeSteal.remainingMs || (getStealRemainingSeconds(state.activeSteal) * 1000));
           const kind = String(data?.steal?.itemType || target.itemType || "block");
           if (kind === "creature") {
             const creatureName = String(data?.steal?.creatureName || target.creatureName || "creature");
-            state.info = `Stealing ${creatureName} from ${target.ownerTag}... stay close (${formatNumber(getStealRemainingSeconds(state.activeSteal))}s).`;
+            state.info = `Stealing ${creatureName} from ${target.ownerTag}...`;
           } else {
             const meta = blockMetaByKey(data.steal.blockRankKey || target.blockKey || "basic");
-            state.info = `Stealing ${meta.label} block from ${target.ownerTag}... stay close (${formatNumber(getStealRemainingSeconds(state.activeSteal))}s).`;
+            state.info = `Stealing ${meta.label} block from ${target.ownerTag}...`;
           }
           updateUI();
           return true;
@@ -5688,18 +5809,14 @@
     function updateStealAndStunState() {
       const now = realNowSec();
       if (state.activeSteal) {
+        const paused = !!state.activeSteal.paused;
         const left = getStealRemainingSeconds(state.activeSteal);
+        state.activeSteal.remainingMs = Math.max(0, Math.round(left * 1000));
+        if (!paused) {
+          state.activeSteal.endAt = Date.now() + state.activeSteal.remainingMs;
+        }
         if (left <= 0) {
           state.activeSteal = null;
-        } else {
-          const pos = getStealTargetPosForActive(state.activeSteal);
-          if (pos) {
-            const d = Math.hypot(player.pos.x - pos.x, player.pos.z - pos.z);
-            if (d > 2.65) {
-              void cancelActiveSteal("moved");
-              state.info = "Steal canceled: moved too far from block.";
-            }
-          }
         }
       }
       if (Number(state.stunUntil || 0) <= now) state.stunUntil = 0;
@@ -6924,11 +7041,25 @@
       if (state.activeSteal && getStealRemainingSeconds(state.activeSteal) > 0.01) {
         const left = getStealRemainingSeconds(state.activeSteal);
         const isCreature = String(state.activeSteal?.itemType || "block") === "creature";
-        setPrompt(`[E] Stealing ${isCreature ? "creature" : "block"}... ${formatNumber(left)}s (stay close)`);
+        if (isActiveStealPaused()) {
+          const why = String(state.activeSteal?.pauseReason || "");
+          if (why === "locked") {
+            const lockLeft = Math.max(0, Number(state.activeSteal?.lockRemainingSec || 0));
+            setPrompt(`Steal paused: target base locked${lockLeft > 0 ? ` (${formatNumber(lockLeft)}s)` : ""}`);
+          } else {
+            setPrompt("Steal paused: move back near the target");
+          }
+        } else {
+          setPrompt(`[E] Stealing ${isCreature ? "creature" : "block"}... ${formatNumber(left)}s`);
+        }
         return;
       }
       const stealTarget = getClosestStealTarget();
       if (stealTarget) {
+        if (Number(stealTarget.lockedRemainingSec || 0) > 0) {
+          setPrompt(`Target base locked (${formatNumber(Number(stealTarget.lockedRemainingSec || 0))}s)`);
+          return;
+        }
         if (stealTarget.itemType === "creature") {
           const rankMeta = blockMetaByKey(stealTarget.blockKey);
           setPrompt(`[E] Steal ${stealTarget.creatureName} (${rankMeta.label})${stealTarget.mutation === "normal" ? "" : ` ${mutationBadge(stealTarget.mutation)}`} (${formatNumber(stealTarget.stealSeconds)}s)`);
@@ -6994,7 +7125,6 @@
     function movePlayer(dt) {
       if (gameplayUiOpen()) return;
       if (Number(state.stunUntil || 0) > realNowSec()) return;
-      if (state.activeSteal && getStealRemainingSeconds(state.activeSteal) > 0.01) return;
 
       const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
       const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
