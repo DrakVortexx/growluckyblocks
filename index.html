@@ -3579,6 +3579,7 @@
     function gameplayUiOpen() {
       return state.shopOpen
         || state.inventoryOpen
+        || cosmeticsPanelEl.classList.contains("open")
         || indexPanelEl.classList.contains("open")
         || chatPanelEl.classList.contains("open")
         || adminPanelEl.classList.contains("open")
@@ -7465,6 +7466,7 @@
         state.inventoryOpen = false;
         indexPanelEl.classList.remove("open");
         inventoryEl.classList.remove("open");
+        cosmeticsPanelEl.classList.remove("open");
         closeWheelPanel();
         closeRebirthPanel();
         closeDailyPanel();
@@ -7481,15 +7483,88 @@
       updateUI();
     }
 
-    function openCosmeticsShop() {
-      shopMode = "cosmetics";
-      if (!String(shopSearchEl.value || "").trim()) {
-        shopSearchEl.value = "bat";
+    function renderCosmeticsPanel() {
+      const cards = BAT_DEFS.map((bat) => {
+        const owned = !!state.batsOwned?.[bat.key];
+        const equipped = normalizeBatKey(state.equippedBat || "sprout") === bat.key;
+        return `
+          <div class="shopOfferCard ${bat.key === "sprout" ? "seed" : (bat.key === "iron" ? "luck" : "server")}">
+            <div class="shopOfferTitle" style="font-size:26px">${bat.label}</div>
+            <div class="shopOfferSub">${bat.desc}</div>
+            <div class="shopOdds">
+              <span>Stun ${formatNumber(bat.stunSec)}s</span>
+              <span>Cooldown ${formatNumber(bat.cooldownSec)}s</span>
+              <span>${owned ? "Owned" : "Locked"}</span>
+            </div>
+            ${owned
+              ? `<button class="shopPriceBtn cosmeticsBatEquipBtn" data-bat="${bat.key}">${equipped ? "EQUIPPED" : "EQUIP"}</button>`
+              : `<button class="shopPriceBtn cosmeticsBatBuyBtn" data-bat="${bat.key}"${state.money < bat.cost ? " disabled" : ""}>${formatMoney(bat.cost)}</button>`
+            }
+            <div class="shopPriceMeta">${owned ? "Use R (or HIT) in PvP." : "Buy and unlock this bat."}</div>
+          </div>
+        `;
+      }).join("");
+
+      cosmeticsSummaryEl.innerHTML = `
+        <div style="font-size:12px;color:#d7e7ff;margin-bottom:8px">Cosmetics are separate from Shop. Bats are managed here.</div>
+        <div class="shopOfferGrid">${cards}</div>
+      `;
+
+      cosmeticsSummaryEl.querySelectorAll(".cosmeticsBatBuyBtn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = normalizeBatKey(btn.dataset.bat || "sprout");
+          const bat = getBatDef(key);
+          ensureBatState();
+          if (state.batsOwned[key]) {
+            state.equippedBat = key;
+            state.info = `${bat.label} equipped.`;
+            updateUI();
+            renderCosmeticsPanel();
+            return;
+          }
+          if (state.money < Number(bat.cost || 0)) {
+            state.info = `Need ${formatMoney(Number(bat.cost || 0))} for ${bat.label}.`;
+            updateUI();
+            return;
+          }
+          state.money -= Number(bat.cost || 0);
+          state.batsOwned[key] = true;
+          state.equippedBat = key;
+          state.info = `Unlocked ${bat.label} and equipped it.`;
+          updateUI();
+          renderCosmeticsPanel();
+        });
+      });
+      cosmeticsSummaryEl.querySelectorAll(".cosmeticsBatEquipBtn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = normalizeBatKey(btn.dataset.bat || "sprout");
+          ensureBatState();
+          if (!state.batsOwned[key]) return;
+          state.equippedBat = key;
+          state.info = `${getBatDef(key).label} equipped.`;
+          updateUI();
+          renderCosmeticsPanel();
+        });
+      });
+    }
+
+    function toggleCosmeticsPanel(force = null) {
+      const open = force === null ? !cosmeticsPanelEl.classList.contains("open") : !!force;
+      cosmeticsPanelEl.classList.toggle("open", open);
+      if (open) {
+        toggleGuide(false);
+        toggleShop(false);
+        toggleInventory(false);
+        indexPanelEl.classList.remove("open");
+        chatPanelEl.classList.remove("open");
+        adminPanelEl.classList.remove("open");
+        settingsPanelEl.classList.remove("open");
+        closeWheelPanel();
+        closeRebirthPanel();
+        closeDailyPanel();
+        document.exitPointerLock();
+        renderCosmeticsPanel();
       }
-      toggleGuide(false);
-      toggleShop(true);
-      state.info = "Cosmetics tab opened.";
-      updateUI();
     }
 
     function toggleInventory(force) {
@@ -7497,6 +7572,7 @@
       state.inventoryOpen = next;
       if (next) {
         indexPanelEl.classList.remove("open");
+        cosmeticsPanelEl.classList.remove("open");
         state.shopOpen = false;
         shopEl.classList.remove("open");
         shopEl.setAttribute("aria-hidden", "true");
@@ -7781,30 +7857,6 @@
           `).join("")}
         </div>
 
-        <div class="shopSectionLabel" style="font-size:30px;margin-top:2px">BATS</div>
-        <div class="shopOfferGrid">
-          ${BAT_DEFS.map((bat) => {
-            const owned = !!state.batsOwned?.[bat.key];
-            const equipped = normalizeBatKey(state.equippedBat || "sprout") === bat.key;
-            return `
-              <div class="shopOfferCard ${bat.key === "sprout" ? "seed" : (bat.key === "iron" ? "luck" : "server")}">
-                <div class="shopOfferTitle" style="font-size:28px">${bat.label}</div>
-                <div class="shopOfferSub">${bat.desc}</div>
-                <div class="shopOdds">
-                  <span>Stun ${formatNumber(bat.stunSec)}s</span>
-                  <span>Cooldown ${formatNumber(bat.cooldownSec)}s</span>
-                  <span>${owned ? "Owned" : "Locked"}</span>
-                </div>
-                ${owned
-                  ? `<button class="shopPriceBtn batEquipBtn" data-bat="${bat.key}">${equipped ? "EQUIPPED" : "EQUIP"}</button>`
-                  : `<button class="shopPriceBtn batBuyBtn" data-bat="${bat.key}"${state.money < bat.cost ? " disabled" : ""}>${formatMoney(bat.cost)}</button>`
-                }
-                <div class="shopPriceMeta">${owned ? "Use R (or HIT) near players." : "Buy and unlock this bat."}</div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-
         <h3 style="margin:10px 0 6px;color:#cef4ff">Rebirth</h3>
         <div style="font-size:12px;opacity:0.9">Rebirth resets run progress and makes future runs faster and richer.</div>
         <div style="font-size:12px;margin-top:6px;color:#ffe9b5">
@@ -7869,42 +7921,6 @@
           const bonus = Number(btn.dataset.bonus || 0);
           state.info = `Store preview: ${usd} pack gives 💫 ${formatNumber(base)}${bonus > 0 ? ` + ${formatNumber(bonus)} bonus` : ""}. Checkout coming soon.`;
           updateUI();
-        });
-      });
-      upgradeButtonsEl.querySelectorAll(".batBuyBtn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const key = normalizeBatKey(btn.dataset.bat || "sprout");
-          const bat = getBatDef(key);
-          ensureBatState();
-          if (state.batsOwned[key]) {
-            state.equippedBat = key;
-            state.info = `${bat.label} equipped.`;
-            updateUI();
-            renderShop();
-            return;
-          }
-          if (state.money < Number(bat.cost || 0)) {
-            state.info = `Need ${formatMoney(Number(bat.cost || 0))} for ${bat.label}.`;
-            updateUI();
-            return;
-          }
-          state.money -= Number(bat.cost || 0);
-          state.batsOwned[key] = true;
-          state.equippedBat = key;
-          state.info = `Unlocked ${bat.label} and equipped it.`;
-          updateUI();
-          renderShop();
-        });
-      });
-      upgradeButtonsEl.querySelectorAll(".batEquipBtn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const key = normalizeBatKey(btn.dataset.bat || "sprout");
-          ensureBatState();
-          if (!state.batsOwned[key]) return;
-          state.equippedBat = key;
-          state.info = `${getBatDef(key).label} equipped.`;
-          updateUI();
-          renderShop();
         });
       });
       renderRankGuide(shopQuery);
@@ -8176,10 +8192,10 @@
 
     function updateUI() {
       renderHudOnly();
-      dockShopBtn.classList.toggle("active", !!state.shopOpen && shopMode !== "cosmetics");
+      dockShopBtn.classList.toggle("active", !!state.shopOpen);
       dockRebirthBtn.classList.toggle("active", rebirthPanelEl.style.display !== "none");
       dockIndexBtn.classList.toggle("active", indexPanelEl.classList.contains("open"));
-      dockCosmeticsBtn.classList.toggle("active", !!state.shopOpen && shopMode === "cosmetics");
+      dockCosmeticsBtn.classList.toggle("active", cosmeticsPanelEl.classList.contains("open"));
       dockSettingsBtn.classList.toggle("active", settingsPanelEl.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
       dockChatBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
@@ -8207,9 +8223,10 @@
 
         keys.add(e.code);
 
-        if (e.code === "Escape" && (state.shopOpen || state.inventoryOpen)) {
+        if (e.code === "Escape" && (state.shopOpen || state.inventoryOpen || cosmeticsPanelEl.classList.contains("open"))) {
           toggleShop(false);
           toggleInventory(false);
+          toggleCosmeticsPanel(false);
           toggleGuide(false);
           return;
         }
@@ -8235,6 +8252,10 @@
         }
         if (e.code === "Escape" && indexPanelEl.classList.contains("open")) {
           toggleIndexPanel(false);
+          return;
+        }
+        if (e.code === "Escape" && cosmeticsPanelEl.classList.contains("open")) {
+          toggleCosmeticsPanel(false);
           return;
         }
 
@@ -8264,6 +8285,7 @@
           && !chatPanelEl.classList.contains("open")
           && !adminPanelEl.classList.contains("open")
           && !settingsPanelEl.classList.contains("open")
+          && !cosmeticsPanelEl.classList.contains("open")
           && sellCreatureModalEl.style.display === "none"
           && rebirthPanelEl.style.display === "none"
           && wheelPanelEl.style.display === "none"
@@ -8278,7 +8300,6 @@
         renderShop();
       });
       dockShopBtn.addEventListener("click", () => {
-        shopMode = "all";
         toggleGuide(false);
         toggleShop(true);
       });
@@ -8291,7 +8312,8 @@
         toggleIndexPanel();
       });
       dockCosmeticsBtn.addEventListener("click", () => {
-        openCosmeticsShop();
+        toggleGuide(false);
+        toggleCosmeticsPanel();
       });
       dockSettingsBtn.addEventListener("click", () => {
         toggleGuide(false);
@@ -8317,6 +8339,7 @@
       });
       chatCloseEl.addEventListener("click", () => toggleChat(false));
       indexCloseEl.addEventListener("click", () => toggleIndexPanel(false));
+      cosmeticsCloseEl.addEventListener("click", () => toggleCosmeticsPanel(false));
       indexTabCreaturesEl.addEventListener("click", () => {
         state.indexTab = "creatures";
         renderIndexPanel();
