@@ -1749,7 +1749,7 @@
   </div>
   <div id="adminPanel" class="panel">
     <h3>Admin Console</h3>
-    <div style="font-size:12px;color:#c5d4ff;margin-bottom:6px">Commands: <b>luck &lt;amount&gt; server|global</b>, <b>event bluemoon [server|global] [seconds]</b>, <b>give &lt;username&gt; &lt;rarity|valentinesblock&gt; &lt;amount&gt; [mutation]</b>, <b>spawn &lt;creature&gt; server|global &lt;amount&gt;</b>, <b>reset &lt;username&gt;</b>, <b>broadcast &lt;message&gt;</b></div>
+    <div style="font-size:12px;color:#c5d4ff;margin-bottom:6px">Commands: <b>luck &lt;amount&gt; server|global</b>, <b>event bluemoon [server|global] [seconds]</b>, <b>give &lt;username&gt; &lt;rarity|valentinesblock&gt; &lt;amount&gt; [mutation]</b>, <b>spawn &lt;creature&gt; server|global &lt;amount&gt;</b>, <b>reset &lt;username&gt;</b>, <b>tutorial reset &lt;username&gt;</b>, <b>broadcast &lt;message&gt;</b></div>
     <input id="adminCmd" placeholder="luck 100" />
     <button id="adminRun">Execute</button>
     <div id="adminMsg"></div>
@@ -4403,6 +4403,18 @@
           state.info = `Admin command: reset ${username}`;
           return;
         }
+        if (head === "tutorial") {
+          const action = String(parts[1] || "").trim().toLowerCase();
+          const username = String(parts[2] || "").trim();
+          if (action !== "reset" || !username) {
+            setAdminMessage("Usage: tutorial reset <username>");
+            return;
+          }
+          await apiJson("/api/admin/tutorial/reset", "POST", { username }, token);
+          setAdminMessage(`Tutorial reset for ${username}.`, true);
+          state.info = `Admin command: tutorial reset ${username}`;
+          return;
+        }
         if (head === "broadcast") {
           const text = cmd.slice(parts[0].length).trim();
           if (!text) {
@@ -4414,7 +4426,7 @@
           showBroadcast(`[ADMIN] ${text}`, 12);
           return;
         }
-        setAdminMessage("Unknown command. Use: luck, event, give, spawn, reset, or broadcast");
+        setAdminMessage("Unknown command. Use: luck, event, give, spawn, reset, tutorial, or broadcast");
       } catch {
         setAdminMessage("Command failed.");
       }
@@ -8681,6 +8693,14 @@
           }
           updateUI();
           setTimeout(() => location.reload(), 250);
+          return;
+        }
+        if (msg?.type === "admin-tutorial-reset") {
+          state.tutorialCompleted = false;
+          state.tutorialStep = Math.max(0, Number(msg.tutorialStep || 0));
+          state.info = `Tutorial reset by ${String(msg.by || "Admin")}.`;
+          updateUI();
+          return;
         }
       });
       ws.addEventListener("close", () => {

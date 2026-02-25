@@ -3168,6 +3168,77 @@ async function handleAdminReset(req, res) {
 app.post("/api/admin/reset", handleAdminReset);
 app.post("/api/admin/reset/", handleAdminReset);
 
+async function resolveTargetPlayerId(nameOrIdRaw) {
+  const needle = String(nameOrIdRaw || "").trim();
+  if (!needle) return "";
+  const wanted = usernameKey(needle);
+
+  for (const state of serverStates.values()) {
+    for (const [pid, profile] of state.activeProfiles.entries()) {
+      const un = usernameKey(profile?.username || "");
+      if (String(pid) === needle || (wanted && un === wanted)) {
+        return String(pid);
+      }
+    }
+  }
+
+  if (wanted) {
+    const found = await findPlayerIdByUsername(needle);
+    if (found) return String(found);
+  }
+
+  const byId = await getPlayerDoc(needle, null);
+  if (byId) return needle;
+  return "";
+}
+
+async function handleAdminTutorialReset(req, res) {
+  try {
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    const uid = decoded.uid;
+    const username = String(req.body?.username || "").trim();
+    if (!username) {
+      res.status(400).json({ error: "username required" });
+      return;
+    }
+
+    const caller = ensurePlayerDataShape(await getPlayerDoc(uid, decoded), 0);
+    if (!isAdminProfile(caller.profile || {})) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const targetPlayerId = await resolveTargetPlayerId(username);
+    if (!targetPlayerId) {
+      res.status(404).json({ error: "target player not found" });
+      return;
+    }
+
+    const target = ensurePlayerDataShape(await getPlayerDoc(targetPlayerId, decoded), 0);
+    target.data.state.tutorialCompleted = false;
+    target.data.state.tutorialStep = 0;
+    await setPlayerDocMerge(targetPlayerId, { data: target.data, updatedAt: Date.now() }, decoded);
+
+    for (const state of serverStates.values()) {
+      notifyPlayer(state, targetPlayerId, {
+        type: "admin-tutorial-reset",
+        playerId: targetPlayerId,
+        by: caller.profile?.username || playerTag(uid),
+        tutorialStep: 0
+      });
+    }
+
+    res.json({ ok: true, targetPlayerId, username, tutorialStep: 0 });
+  } catch (err) {
+    console.error("/api/admin/tutorial/reset failed", err);
+    res.status(500).json({ error: "internal error" });
+  }
+}
+
+app.post("/api/admin/tutorial/reset", handleAdminTutorialReset);
+app.post("/api/admin/tutorial/reset/", handleAdminTutorialReset);
+
 app.post("/api/admin/broadcast", async (req, res) => {
   try {
     const decoded = await verifyAuth(req, res);
