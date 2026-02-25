@@ -122,6 +122,81 @@
 
     #prompt.show { opacity: 1; }
 
+    #tutorialPanel {
+      left: 50%;
+      top: 84px;
+      transform: translateX(-50%);
+      width: min(560px, calc(100vw - 28px));
+      padding: 10px 12px;
+      z-index: 91;
+      display: none;
+      border: 1px solid rgba(190, 235, 255, 0.54);
+      background: linear-gradient(180deg, rgba(14, 30, 44, 0.93), rgba(8, 18, 28, 0.93));
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+    }
+
+    #tutorialPanel.show { display: block; }
+
+    #tutorialHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    #tutorialTitle {
+      font-family: "Exo 2", "Rajdhani", sans-serif;
+      font-size: 17px;
+      font-weight: 900;
+      color: #e3f4ff;
+      letter-spacing: 0.3px;
+    }
+
+    #tutorialProgress {
+      font-size: 12px;
+      font-weight: 800;
+      color: #b1d8f4;
+    }
+
+    #tutorialText {
+      color: #e9f8ff;
+      font-size: 14px;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+
+    #tutorialActions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    #tutorialArrow {
+      position: fixed;
+      z-index: 92;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: none;
+      pointer-events: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      line-height: 1;
+      color: #ffffff;
+      border: 1px solid rgba(195, 235, 255, 0.85);
+      background: rgba(40, 119, 191, 0.92);
+      box-shadow: 0 0 14px rgba(94, 183, 255, 0.65);
+      transform: translate(-50%, -50%);
+      animation: tutorialArrowPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes tutorialArrowPulse {
+      0% { transform: translate(-50%, -50%) scale(0.88); opacity: 0.76; }
+      50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(0.88); opacity: 0.76; }
+    }
+
     #help {
       right: 12px;
       top: 70px;
@@ -1604,6 +1679,18 @@
   </div>
   <div id="hud" class="panel"></div>
   <div id="prompt"></div>
+  <div id="tutorialPanel" class="panel">
+    <div id="tutorialHeader">
+      <div id="tutorialTitle">Tutorial</div>
+      <div id="tutorialProgress">Step 1/7</div>
+    </div>
+    <div id="tutorialText"></div>
+    <div id="tutorialActions">
+      <button id="tutorialSkip" class="btn">Skip</button>
+      <button id="tutorialContinue" class="btn" style="display:none;background:rgba(72,170,95,.95);border-color:rgba(168,240,177,.7)">Continue</button>
+    </div>
+  </div>
+  <div id="tutorialArrow">↓</div>
 
   <div id="help" class="panel">
     <h2>Grow Lucky Blocks</h2>
@@ -1854,7 +1941,7 @@
       { key: "iron", label: "Iron Bat", cost: 45000, stunSec: 1.3, cooldownSec: 1.25, desc: "Longer interrupt window." },
       { key: "shock", label: "Shock Bat", cost: 1800000, stunSec: 1.8, cooldownSec: 1.05, desc: "Best stun and fastest swings." }
     ]);
-    const VALENTINES_BLOCK_DROP_CHANCE_FEBRUARY = 0.008;
+    const TUTORIAL_LAST_STEP = 7;
 
     const canvas = document.getElementById("game");
     const crosshairEl = document.getElementById("crosshair");
@@ -1872,6 +1959,13 @@
     const fxLayerEl = document.getElementById("fxLayer");
     const helpEl = document.getElementById("help");
     const broadcastBannerEl = document.getElementById("broadcastBanner");
+    const tutorialPanelEl = document.getElementById("tutorialPanel");
+    const tutorialTitleEl = document.getElementById("tutorialTitle");
+    const tutorialProgressEl = document.getElementById("tutorialProgress");
+    const tutorialTextEl = document.getElementById("tutorialText");
+    const tutorialSkipEl = document.getElementById("tutorialSkip");
+    const tutorialContinueEl = document.getElementById("tutorialContinue");
+    const tutorialArrowEl = document.getElementById("tutorialArrow");
     const dockShopBtn = document.getElementById("dockShop");
     const dockRebirthBtn = document.getElementById("dockRebirth");
     const dockIndexBtn = document.getElementById("dockIndex");
@@ -2258,6 +2352,8 @@
         luckyRankKey: "",
         luckyAmount: 0
       },
+      tutorialCompleted: false,
+      tutorialStep: 0,
       quests: [
         { id: "q1", text: "Harvest 5 crops", target: 5, type: "harvest", reward: 550, done: false },
         { id: "q2", text: "Collect 8 creatures", target: 8, type: "creatures", reward: 2500, done: false },
@@ -2357,6 +2453,7 @@
           state.seeds += 5 + state.seedYieldBonus;
           state.seedTier += 1;
           state.info = "Bought a seed bag.";
+          tutorialTrigger("buy-seeds");
         }
       }
     ];
@@ -3174,7 +3271,176 @@
     }
 
     function shouldDropValentinesBlock(nowSec = realNowSec()) {
-      return isFebruaryActive(nowSec) && Math.random() < VALENTINES_BLOCK_DROP_CHANCE_FEBRUARY;
+      return false;
+    }
+
+    function tutorialIsActive() {
+      if (!gameStarted) return false;
+      if (state.tutorialCompleted) return false;
+      const step = Math.floor(Number(state.tutorialStep || 0));
+      return step >= 0 && step <= TUTORIAL_LAST_STEP;
+    }
+
+    function tutorialStepText(step = Number(state.tutorialStep || 0)) {
+      switch (Math.floor(step)) {
+        case 0:
+          return "Walk to the Seed Shack and press E to buy a seed bag.";
+        case 1:
+          return "Plant a seed in your farm plot (press E in your plot).";
+        case 2:
+          return "Wait for your crop to finish growing.";
+        case 3:
+          return "Harvest the grown crop with E to get a Lucky Block.";
+        case 4:
+          return "Walk to your barn and stand near a pedestal.";
+        case 5:
+          return "Press E on an empty pedestal to place your Lucky Block.";
+        case 6:
+          return "Press F on the placed Lucky Block to open it.";
+        case 7:
+          return "Tutorial complete. Have fun and continue building your farm.";
+        default:
+          return "";
+      }
+    }
+
+    function findClosestPlotByStage(stage) {
+      const wanted = Number(stage);
+      let picked = null;
+      let best = Infinity;
+      for (const plot of plots) {
+        if (!plot || Number(plot.stage) !== wanted) continue;
+        const dx = Number(plot.position?.x || 0) - Number(player.pos?.x || 0);
+        const dz = Number(plot.position?.z || 0) - Number(player.pos?.z || 0);
+        const d2 = dx * dx + dz * dz;
+        if (d2 < best) {
+          best = d2;
+          picked = plot;
+        }
+      }
+      return picked;
+    }
+
+    function tutorialTargetPosition(step = Number(state.tutorialStep || 0)) {
+      const s = Math.floor(step);
+      if (s === 0) return new THREE.Vector3(-10.5, 2.7, 2.2);
+      if (s === 1) {
+        const empty = findClosestPlotByStage(0);
+        const any = plots[0] || null;
+        const p = empty || any;
+        return p ? new THREE.Vector3(p.position.x, 1.8, p.position.z) : null;
+      }
+      if (s === 2) {
+        const growing = findClosestPlotByStage(1);
+        const p = growing || plots[0] || null;
+        return p ? new THREE.Vector3(p.position.x, 1.9, p.position.z) : null;
+      }
+      if (s === 3) {
+        const ready = findClosestPlotByStage(2);
+        const p = ready || plots[0] || null;
+        return p ? new THREE.Vector3(p.position.x, 1.9, p.position.z) : null;
+      }
+      if (s === 4 || s === 5 || s === 6) {
+        if (!pedestals.length) return null;
+        let ped = pedestals[0];
+        if (s === 6) {
+          const opened = pedestals.find((p) => p?.hasBlock);
+          if (opened) ped = opened;
+        }
+        return ped ? new THREE.Vector3(ped.position.x, 2.1, ped.position.z) : null;
+      }
+      return null;
+    }
+
+    function tutorialWorldToScreen(worldPos) {
+      if (!worldPos || !camera) return null;
+      const ndc = worldPos.clone().project(camera);
+      if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y) || !Number.isFinite(ndc.z)) return null;
+      if (ndc.z < -1 || ndc.z > 1) return null;
+      const x = (ndc.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-ndc.y * 0.5 + 0.5) * window.innerHeight;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x, y };
+    }
+
+    function advanceTutorialStep() {
+      if (!tutorialIsActive()) return;
+      state.tutorialStep = Math.min(TUTORIAL_LAST_STEP, Math.floor(Number(state.tutorialStep || 0)) + 1);
+      if (state.tutorialStep === TUTORIAL_LAST_STEP) {
+        state.info = "Final tutorial step: press Continue to finish.";
+      }
+      updateUI();
+    }
+
+    function finishTutorial() {
+      state.tutorialCompleted = true;
+      state.tutorialStep = TUTORIAL_LAST_STEP + 1;
+      tutorialPanelEl.classList.remove("show");
+      tutorialArrowEl.style.display = "none";
+      state.info = "Tutorial complete. Have fun.";
+      updateUI();
+    }
+
+    function tutorialTrigger(action) {
+      if (!tutorialIsActive()) return;
+      const step = Math.floor(Number(state.tutorialStep || 0));
+      const key = String(action || "").trim().toLowerCase();
+      if (step === 0 && key === "buy-seeds") {
+        advanceTutorialStep();
+      } else if (step === 1 && key === "plant-seed") {
+        advanceTutorialStep();
+      } else if (step === 3 && key === "harvest") {
+        advanceTutorialStep();
+      } else if (step === 5 && key === "place-block") {
+        advanceTutorialStep();
+      } else if (step === 6 && key === "open-block") {
+        advanceTutorialStep();
+      }
+    }
+
+    function updateTutorialState() {
+      if (!tutorialIsActive()) {
+        tutorialPanelEl.classList.remove("show");
+        tutorialArrowEl.style.display = "none";
+        return;
+      }
+
+      const step = Math.floor(Number(state.tutorialStep || 0));
+      if (step === 2 && plots.some((p) => Number(p?.stage || 0) === 2)) {
+        advanceTutorialStep();
+      } else if (step === 4 && pedestals[0]) {
+        const p = pedestals[0].position;
+        const d = Math.hypot(Number(player.pos.x || 0) - Number(p.x || 0), Number(player.pos.z || 0) - Number(p.z || 0));
+        if (d <= 2.5) advanceTutorialStep();
+      } else if (step === 5 && pedestals.some((p) => !!p?.hasBlock)) {
+        advanceTutorialStep();
+      } else if (step === 6 && creatures.length > 0) {
+        advanceTutorialStep();
+      }
+
+      if (!tutorialIsActive()) return;
+
+      const renderStep = Math.floor(Number(state.tutorialStep || 0));
+      tutorialPanelEl.classList.add("show");
+      tutorialTitleEl.textContent = "Tutorial";
+      tutorialProgressEl.textContent = renderStep >= TUTORIAL_LAST_STEP ? "Complete" : `Step ${renderStep + 1}/7`;
+      tutorialTextEl.textContent = tutorialStepText(renderStep);
+      tutorialContinueEl.style.display = renderStep >= TUTORIAL_LAST_STEP ? "inline-block" : "none";
+
+      if (renderStep >= TUTORIAL_LAST_STEP) {
+        tutorialArrowEl.style.display = "none";
+        return;
+      }
+
+      const target = tutorialTargetPosition(renderStep);
+      const screen = tutorialWorldToScreen(target);
+      if (!screen) {
+        tutorialArrowEl.style.display = "none";
+        return;
+      }
+      tutorialArrowEl.style.display = "flex";
+      tutorialArrowEl.style.left = `${screen.x}px`;
+      tutorialArrowEl.style.top = `${screen.y - 28}px`;
     }
 
     function blueMoonWindowInfo(nowSec = realNowSec()) {
@@ -4321,6 +4587,8 @@
           indexTab: state.indexTab,
           indexSeen: state.indexSeen,
           indexBlueMoonSeen: state.indexBlueMoonSeen,
+          tutorialCompleted: !!state.tutorialCompleted,
+          tutorialStep: Math.max(0, Math.floor(Number(state.tutorialStep || 0))),
           quests: state.quests.map((q) => ({ id: q.id, done: q.done })),
           info: state.info
         },
@@ -4412,6 +4680,25 @@
         if (typeof loaded[key] === "number" && Number.isFinite(loaded[key])) {
           state[key] = loaded[key];
         }
+      }
+      if (typeof loaded.tutorialCompleted === "boolean") {
+        state.tutorialCompleted = loaded.tutorialCompleted;
+      } else {
+        const legacyProgress = Number(loaded.harvested || 0) > 0
+          || Number(loaded.totalCreatures || 0) > 0
+          || Number(loaded.rebirths || 0) > 0
+          || (Array.isArray(payload.creatures) && payload.creatures.length > 0);
+        state.tutorialCompleted = legacyProgress;
+      }
+      if (Number.isFinite(Number(loaded.tutorialStep))) {
+        state.tutorialStep = Math.max(0, Math.floor(Number(loaded.tutorialStep || 0)));
+      } else if (!state.tutorialCompleted) {
+        state.tutorialStep = 0;
+      }
+      if (state.tutorialCompleted) {
+        state.tutorialStep = TUTORIAL_LAST_STEP + 1;
+      } else {
+        state.tutorialStep = Math.min(TUTORIAL_LAST_STEP, Math.max(0, Math.floor(Number(state.tutorialStep || 0))));
       }
       state.hatchLuckTier = Math.max(1, Number(state.hatchLuckTier || 1));
       state.rebirths = Math.max(0, Math.min(MAX_REBIRTHS, Math.floor(Number(state.rebirths || 0))));
@@ -5753,6 +6040,7 @@
           plot.sprout.scale.set(0.7, 0.7, 0.7);
           plot.sprout.material.color.setHex(plot.blueMoon ? 0x5da8ff : rankHex(rolledRank.key));
           state.info = `${rolledRank.label}${plot.blueMoon ? " Blue Moon" : ""} seed planted. Harvest to earn a ${rolledRank.label}${plot.blueMoon ? " Blue Moon" : ""} Lucky Block.`;
+          tutorialTrigger("plant-seed");
         }
       } else if (plot.stage === 2) {
         const rank = plot.seedRank || getRankByKey("basic");
@@ -5776,6 +6064,7 @@
         plot.sprout.visible = false;
         plot.fruit.visible = false;
         state.info = `Harvested crop for ${formatMoney(value)} and got +1 ${rewardBlockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`} Lucky Block.`;
+        tutorialTrigger("harvest");
       } else {
         return false;
       }
@@ -5991,6 +6280,7 @@
               updatePedestalBlockVisual(pedestal);
               const placedMeta = blockMetaByKey(pick.key);
               state.info = `${placedMeta.label}${pedestal.blockMutation === "normal" ? "" : ` ${mutationBadge(pedestal.blockMutation)}`} lucky block placed on pedestal.`;
+              tutorialTrigger("place-block");
             } else {
               state.info = "No lucky blocks to place.";
             }
@@ -6560,6 +6850,7 @@
           return;
         }
         state.info = `${rank.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} creature hatched from ${sourceMeta.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} block: ${creature.name} (+${formatMoney(creature.rate)}/s)`;
+        tutorialTrigger("open-block");
         checkQuests();
         updateUI();
       }, 860);
@@ -6674,6 +6965,7 @@
     function movePlayer(dt) {
       if (gameplayUiOpen()) return;
       if (Number(state.stunUntil || 0) > realNowSec()) return;
+      if (state.activeSteal && getStealRemainingSeconds(state.activeSteal) > 0.01) return;
 
       const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
       const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
@@ -7810,6 +8102,12 @@
       });
       dailyCloseEl.addEventListener("click", closeDailyPanel);
       dailyClaimBtnEl.addEventListener("click", closeDailyPanel);
+      tutorialSkipEl.addEventListener("click", () => {
+        finishTutorial();
+      });
+      tutorialContinueEl.addEventListener("click", () => {
+        finishTutorial();
+      });
       settingsLookEl.addEventListener("input", () => {
         settings.lookSensitivity = Math.max(0.35, Math.min(2.5, Number(settingsLookEl.value || 1)));
         updateSettingsAndSave();
@@ -7982,6 +8280,7 @@
       updateMoneyPopups(dt);
       updateEconomy(now);
       updateStealAndStunState();
+      updateTutorialState();
       dayNight(now);
       checkQuests();
       updatePrompt();
