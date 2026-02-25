@@ -6673,7 +6673,9 @@
 
     function movePlayer(dt) {
       if (gameplayUiOpen()) return;
+      // Prevent movement while stunned or while actively stealing, but still allow looking around
       if (Number(state.stunUntil || 0) > realNowSec()) return;
+      if (state.activeSteal && getStealRemainingSeconds(state.activeSteal) > 0.01) return;
 
       const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
       const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
@@ -7656,6 +7658,219 @@
       }
     }
 
+    // --- Simple tutorial system (first-time players) ---
+    function worldToScreen(vec3) {
+      const v = vec3.clone();
+      v.project(camera);
+      const x = (v.x + 1) / 2 * canvas.clientWidth;
+      const y = (-v.y + 1) / 2 * canvas.clientHeight;
+      return { x, y, onScreen: v.z < 1 };
+    }
+
+    let tutorialBoxEl = null;
+    let tutorialArrowEl = null;
+    function ensureTutorialElements() {
+      if (!tutorialBoxEl) {
+        tutorialBoxEl = document.createElement("div");
+        tutorialBoxEl.style.position = "absolute";
+        tutorialBoxEl.style.left = "12px";
+        tutorialBoxEl.style.bottom = "18px";
+        tutorialBoxEl.style.padding = "12px 14px";
+        tutorialBoxEl.style.background = "rgba(4,10,18,0.85)";
+        tutorialBoxEl.style.color = "#dfffe9";
+        tutorialBoxEl.style.fontSize = "15px";
+        tutorialBoxEl.style.borderRadius = "8px";
+        tutorialBoxEl.style.zIndex = 9999;
+        tutorialBoxEl.style.maxWidth = "46vw";
+        document.body.appendChild(tutorialBoxEl);
+      }
+      if (!tutorialArrowEl) {
+        tutorialArrowEl = document.createElement("div");
+        tutorialArrowEl.style.position = "absolute";
+        tutorialArrowEl.style.width = "36px";
+        tutorialArrowEl.style.height = "36px";
+        tutorialArrowEl.style.background = "rgba(255,255,255,0.95)";
+        tutorialArrowEl.style.clipPath = "polygon(50% 0%, 100% 100%, 0% 100%)";
+        tutorialArrowEl.style.transform = "translate(-50%, -50%) rotate(0deg)";
+        tutorialArrowEl.style.zIndex = 9999;
+        tutorialArrowEl.style.display = "none";
+        document.body.appendChild(tutorialArrowEl);
+      }
+    }
+
+    const TUTORIAL_KEY = "glb_tutorial_done";
+    let tutorial = { step: -1, active: false };
+
+    function startTutorialIfNeeded() {
+      try {
+        if (localStorage.getItem(TUTORIAL_KEY)) return;
+      } catch (e) {
+        // ignore localStorage issues
+        return;
+      }
+      startTutorial();
+    }
+
+    function startTutorial() {
+      ensureTutorialElements();
+      tutorial = { step: 0, active: true };
+      state.info = "Tutorial: Use WASD or arrow keys to move. Follow the arrow to the Seed Shack.";
+      updateUI();
+    }
+
+    function endTutorial() {
+      tutorial.active = false;
+      tutorial.step = -1;
+      if (tutorialBoxEl) tutorialBoxEl.style.display = "none";
+      if (tutorialArrowEl) tutorialArrowEl.style.display = "none";
+      try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch (e) {}
+      state.info = "Have fun!";
+      updateUI();
+    }
+
+    function tutorialShow(text) {
+      ensureTutorialElements();
+      tutorialBoxEl.style.display = "block";
+      tutorialBoxEl.innerHTML = String(text || "");
+    }
+
+    function tutorialShowArrowAt(pos3, rotateDeg = 0) {
+      ensureTutorialElements();
+      const scr = worldToScreen(pos3);
+      if (!scr.onScreen) {
+        tutorialArrowEl.style.display = "none";
+        return;
+      }
+      tutorialArrowEl.style.display = "block";
+      tutorialArrowEl.style.left = `${Math.round(scr.x)}px`;
+      tutorialArrowEl.style.top = `${Math.round(scr.y)}px`;
+      tutorialArrowEl.style.transform = `translate(-50%, -50%) rotate(${rotateDeg}deg)`;
+    }
+
+    function tutorialTick() {
+      if (!tutorial.active) return;
+      // step sequence:
+      // 0 - walk to seed shack
+      // 1 - buy seeds (auto)
+      // 2 - plant seed (auto)
+      // 3 - wait for growth
+      // 4 - harvest (auto)
+      // 5 - go to pedestal
+      // 6 - place lucky block (auto)
+      // 7 - open lucky block (auto)
+      // 8 - finish
+
+      const seedShackPos = new THREE.Vector3(-10.5, 0, 2.2);
+      if (tutorial.step === 0) {
+        tutorialShow("Tutorial — Walk to the Seed Shack (use WASD or arrow keys)");
+        tutorialShowArrowAt(seedShackPos);
+        const d = Math.hypot(player.pos.x - seedShackPos.x, player.pos.z - seedShackPos.z);
+        if (d < 4.5) {
+          tutorial.step = 1;
+        }
+        return;
+      }
+
+      if (tutorial.step === 1) {
+        tutorialShow("Buying seed bag for you...");
+        tutorialShowArrowAt(seedShackPos);
+        // give seeds directly via core purchase to avoid money checks
+        try { corePurchases[0].buy(); } catch (e) {}
+        updateUI();
+        tutorial.step = 2;
+        return;
+      }
+
+      if (tutorial.step === 2) {
+        tutorialShow("Plant a seed — move to a plot. We'll plant for you when you're close.");
+        const plot = pickClosestPlotForAnywhere();
+        if (plot) tutorialShowArrowAt(plot.position);
+        const d = plot ? Math.hypot(player.pos.x - plot.position.x, player.pos.z - plot.position.z) : Infinity;
+        if (plot && d < 2.0 && plot.stage === 0 && state.seeds > 0) {
+          // plant automatically
+          interactWithPlot(plot);
+          tutorial.step = 3;
+        }
+        return;
+      }
+
+      if (tutorial.step === 3) {
+        // wait until any plot becomes harvestable
+        const ready = plots.find((p) => p.stage === 2);
+        tutorialShow("Wait for the crop to grow... this may take a few seconds.");
+        if (ready) {
+          tutorial.step = 4;
+        }
+        return;
+      }
+
+      if (tutorial.step === 4) {
+        const plot = plots.find((p) => p.stage === 2);
+        if (plot) {
+          tutorialShow("Harvesting for you...");
+          interactWithPlot(plot);
+          tutorial.step = 5;
+          return;
+        }
+        return;
+      }
+
+      if (tutorial.step === 5) {
+        // point to first pedestal
+        const targetPedestal = pedestals[0] || null;
+        if (!targetPedestal) { tutorial.step = 8; return; }
+        tutorialShow("Bring your lucky block to the pedestal — follow the arrow");
+        tutorialShowArrowAt(targetPedestal.position);
+        const d = Math.hypot(player.pos.x - targetPedestal.position.x, player.pos.z - targetPedestal.position.z);
+        if (d < 2.5) {
+          tutorial.step = 6;
+        }
+        return;
+      }
+
+      if (tutorial.step === 6) {
+        const ped = pedestals[0] || null;
+        if (!ped) { tutorial.step = 8; return; }
+        tutorialShow("Placing your lucky block on the pedestal...");
+        // if we have a block, auto-place
+        if (totalLuckyBlocks() > 0) {
+          // call the pedestal interaction for placing
+          try {
+            if (ped.interactable && ped.interactable.interact) ped.interactable.interact("KeyE");
+            else {
+              // fallback: place manually like the code does
+              const pick = bestAvailableLuckySelection();
+              removeLuckyBlock(pick.key, 1, pick.mutation);
+              ped.hasBlock = true;
+              ped.blockRankKey = pick.key;
+              ped.blockMutation = normalizeMutation(pick.mutation || "normal");
+              updatePedestalBlockVisual(ped);
+            }
+          } catch (e) {}
+        }
+        updateUI();
+        tutorial.step = 7;
+        return;
+      }
+
+      if (tutorial.step === 7) {
+        const ped = pedestals[0] || null;
+        if (!ped) { tutorial.step = 8; return; }
+        tutorialShow("Opening your lucky block... watch it hatch!");
+        try { openLuckyBlock(ped); } catch (e) {}
+        tutorial.step = 8;
+        return;
+      }
+
+      if (tutorial.step === 8) {
+        tutorialShow("Tutorial complete — have fun growing your farm!");
+        setTimeout(() => endTutorial(), 2400);
+        tutorial.step = 9;
+        return;
+      }
+    }
+
+
     function installEvents() {
       addEventListener("resize", size);
 
@@ -7958,8 +8173,10 @@
       renderShop();
       installEvents();
       size();
-      updateUI();
-      void refreshCashLeaderboard(true);
+  updateUI();
+  // start tutorial for first-time players
+  try { startTutorialIfNeeded(); } catch (e) {}
+  void refreshCashLeaderboard(true);
     }
 
     let prev = performance.now();
@@ -7982,6 +8199,7 @@
       updateMoneyPopups(dt);
       updateEconomy(now);
       updateStealAndStunState();
+  tutorialTick();
       dayNight(now);
       checkQuests();
       updatePrompt();
