@@ -580,6 +580,20 @@
       font-size: 14px;
     }
 
+    #cosmeticsPanel {
+      right: 12px;
+      bottom: 12px;
+      width: min(420px, calc(100vw - 24px));
+      padding: 10px 12px;
+      font-size: 12px;
+      display: none;
+      z-index: 54;
+      max-height: min(74vh, 560px);
+      overflow: auto;
+    }
+
+    #cosmeticsPanel.open { display: block; }
+
     .invTop {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -1606,6 +1620,7 @@
         display: none;
       }
       #inventory,
+      #cosmeticsPanel,
       #chatPanel,
       #adminPanel,
       #settingsPanel,
