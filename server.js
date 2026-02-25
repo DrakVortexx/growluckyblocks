@@ -51,6 +51,12 @@ const BAT_DEFS = Object.freeze({
   iron: { key: "iron", label: "Iron Bat", stunSec: 1.3, cooldownSec: 1.25 },
   shock: { key: "shock", label: "Shock Bat", stunSec: 1.8, cooldownSec: 1.05 }
 });
+const FREEZE_RAY_DEF = Object.freeze({
+  key: "freezeray",
+  label: "Freeze Ray",
+  stunSec: 10,
+  cooldownSec: 20
+});
 const SERVER_LUCK_STARDUST_COST_BY_TARGET = Object.freeze({
   "100": 25,
   "300": 90,
@@ -740,11 +746,17 @@ function ensureBatState(stateObj) {
   if (!stateObj.batsOwned.sprout) stateObj.batsOwned.sprout = true;
   stateObj.equippedBat = normalizeBatKey(stateObj.equippedBat || "sprout");
   if (!stateObj.batsOwned[stateObj.equippedBat]) stateObj.equippedBat = "sprout";
+  if (typeof stateObj.freezeRayOwned !== "boolean") stateObj.freezeRayOwned = false;
+  stateObj.equippedCombatTool = String(stateObj.equippedCombatTool || "bat").toLowerCase() === "freezeray" ? "freezeray" : "bat";
+  if (stateObj.equippedCombatTool === "freezeray" && !stateObj.freezeRayOwned) stateObj.equippedCombatTool = "bat";
 }
 
-function getEquippedBatFromPlayerDoc(playerDoc) {
+function getEquippedCombatAbilityFromPlayerDoc(playerDoc) {
   const stateObj = playerDoc?.data?.state;
   ensureBatState(stateObj);
+  if (String(stateObj?.equippedCombatTool || "bat") === "freezeray" && stateObj?.freezeRayOwned) {
+    return { ...FREEZE_RAY_DEF };
+  }
   const key = normalizeBatKey(stateObj?.equippedBat || "sprout");
   return BAT_DEFS[key] || BAT_DEFS.sprout;
 }
@@ -2880,19 +2892,19 @@ app.post("/api/pvp/hit", async (req, res) => {
     }
     const cooldownUntil = Number(serverState.batCooldownUntilByPlayer.get(playerId) || 0);
     if (cooldownUntil > nowSec) {
-      res.status(400).json({ error: "bat on cooldown", cooldownLeft: Math.max(0, cooldownUntil - nowSec) });
+      res.status(400).json({ error: "ability on cooldown", cooldownLeft: Math.max(0, cooldownUntil - nowSec) });
       return;
     }
     const hitterCarry = serverState.carriedByThief.get(playerId) || null;
     if (hitterCarry && String(hitterCarry.itemType || "block") === "creature") {
-      res.status(400).json({ error: "cannot swing bat while carrying a stolen creature" });
+      res.status(400).json({ error: "cannot use pvp gear while carrying a stolen creature" });
       return;
     }
 
     const hitterDoc = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), serverState.activeSlots.get(playerId) ?? 0);
-    const bat = getEquippedBatFromPlayerDoc(hitterDoc);
-    const stunUntil = nowSec + Number(bat.stunSec || 0.8);
-    const nextCooldown = nowSec + Number(bat.cooldownSec || 1.5);
+    const ability = getEquippedCombatAbilityFromPlayerDoc(hitterDoc);
+    const stunUntil = nowSec + Number(ability.stunSec || 0.8);
+    const nextCooldown = nowSec + Number(ability.cooldownSec || 1.5);
     serverState.stunUntilByPlayer.set(targetPlayerId, stunUntil);
     serverState.batCooldownUntilByPlayer.set(playerId, nextCooldown);
 
@@ -2910,10 +2922,12 @@ app.post("/api/pvp/hit", async (req, res) => {
       type: "pvp-hit",
       byPlayerId: playerId,
       targetPlayerId,
-      batKey: bat.key,
-      batLabel: bat.label,
-      stunSec: Number(bat.stunSec || 0),
-      cooldownSec: Number(bat.cooldownSec || 0),
+      batKey: ability.key,
+      batLabel: ability.label,
+      abilityKey: ability.key,
+      abilityLabel: ability.label,
+      stunSec: Number(ability.stunSec || 0),
+      cooldownSec: Number(ability.cooldownSec || 0),
       canceledSteal,
       returnedCarry,
       at: Date.now()

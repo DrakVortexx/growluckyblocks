@@ -1968,6 +1968,15 @@
       { key: "iron", label: "Iron Bat", cost: 45000, stunSec: 1.3, cooldownSec: 1.25, desc: "Longer interrupt window." },
       { key: "shock", label: "Shock Bat", cost: 1800000, stunSec: 1.8, cooldownSec: 1.05, desc: "Best stun and fastest swings." }
     ]);
+    const FREEZE_RAY_DEF = Object.freeze({
+      key: "freezeray",
+      label: "Freeze Ray",
+      stardustCost: 15,
+      minRebirth: 1,
+      stunSec: 10,
+      cooldownSec: 20,
+      desc: "Freezes a target player for 10s."
+    });
     const TUTORIAL_LAST_STEP = 7;
 
     const canvas = document.getElementById("game");
@@ -2215,6 +2224,19 @@
       if (!state.batsOwned.sprout) state.batsOwned.sprout = true;
       state.equippedBat = normalizeBatKey(state.equippedBat || "sprout");
       if (!state.batsOwned[state.equippedBat]) state.equippedBat = "sprout";
+      if (typeof state.freezeRayOwned !== "boolean") state.freezeRayOwned = false;
+      state.equippedCombatTool = String(state.equippedCombatTool || "bat").toLowerCase() === "freezeray" ? "freezeray" : "bat";
+      if (state.equippedCombatTool === "freezeray" && !state.freezeRayOwned) state.equippedCombatTool = "bat";
+    }
+
+    function isFreezeRayEquipped() {
+      ensureBatState();
+      return state.equippedCombatTool === "freezeray" && !!state.freezeRayOwned;
+    }
+
+    function currentCombatLabel() {
+      if (isFreezeRayEquipped()) return FREEZE_RAY_DEF.label;
+      return getBatDef(state.equippedBat).label;
     }
 
     function getStealTimeForRank(rankKey) {
@@ -2363,6 +2385,8 @@
       personalLuckUnlocked: 1,
       batsOwned: { sprout: true },
       equippedBat: "sprout",
+      freezeRayOwned: false,
+      equippedCombatTool: "bat",
       batCooldownUntil: 0,
       stunUntil: 0,
       activeSteal: null,
@@ -3760,6 +3784,7 @@
       state.carriedSteal = null;
       state.stunUntil = 0;
       state.batCooldownUntil = 0;
+      state.equippedCombatTool = "bat";
       ensureBatState();
       state.quests.forEach((q) => { q.done = false; });
       closeSellCreatureModal();
@@ -4629,6 +4654,8 @@
           personalLuckUnlocked: state.personalLuckUnlocked,
           batsOwned: state.batsOwned,
           equippedBat: state.equippedBat,
+          freezeRayOwned: !!state.freezeRayOwned,
+          equippedCombatTool: state.equippedCombatTool,
           luckShopTarget: state.luckShopTarget,
           inventoryQuery: state.inventoryQuery,
           inventoryFocus: state.inventoryFocus,
@@ -4759,6 +4786,10 @@
         for (const b of BAT_DEFS) state.batsOwned[b.key] = !!loaded.batsOwned[b.key];
       }
       if (typeof loaded.equippedBat === "string") state.equippedBat = normalizeBatKey(loaded.equippedBat);
+      if (typeof loaded.freezeRayOwned === "boolean") state.freezeRayOwned = loaded.freezeRayOwned;
+      if (typeof loaded.equippedCombatTool === "string") {
+        state.equippedCombatTool = String(loaded.equippedCombatTool).toLowerCase() === "freezeray" ? "freezeray" : "bat";
+      }
       ensureBatState();
       state.lastSpinWindow = (typeof loaded.lastSpinWindow === "string" && loaded.lastSpinWindow.trim())
         ? loaded.lastSpinWindow.trim()
@@ -5332,12 +5363,8 @@
         const x = Number.isFinite(p.x) ? p.x : slotOffsetX(p.slot || 0);
         const z = Number.isFinite(p.z) ? p.z : 11;
         const playerName = String(p.tag || playerTag(p.playerId || "player"));
-        const avatar = new THREE.Mesh(
-          new THREE.BoxGeometry(0.72, 1.7, 0.52),
-          new THREE.MeshStandardMaterial({ color: 0x7a4b2e, roughness: 0.72, metalness: 0.05 })
-        );
-        avatar.position.set(x, 0.86, z);
-        avatar.castShadow = true;
+        const avatar = createPixelAvatarMesh(String(p.playerId || ""), playerName);
+        avatar.position.set(x, 0, z);
         setMeshLabel(avatar, playerName, "Player");
         scene.add(avatar);
         remoteAvatarMeshes.push(avatar);
@@ -5347,6 +5374,53 @@
 
     function playerMetaById(playerId) {
       return (multiplayer.players || []).find((p) => String(p.playerId || "") === String(playerId || "")) || null;
+    }
+
+    function avatarColorSeed(input) {
+      const s = String(input || "");
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i += 1) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return Math.abs(h >>> 0);
+    }
+
+    function createPixelAvatarMesh(playerId, playerName = "Player") {
+      const seed = avatarColorSeed(`${playerId}|${playerName}`);
+      const hue = (seed % 360) / 360;
+      const skinColor = new THREE.Color().setHSL((hue + 0.06) % 1, 0.42, 0.56);
+      const shirtColor = new THREE.Color().setHSL((hue + 0.62) % 1, 0.52, 0.42);
+      const pantsColor = new THREE.Color().setHSL((hue + 0.28) % 1, 0.22, 0.22);
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.9, metalness: 0.02 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 0.95, metalness: 0 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.85, metalness: 0.03 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.9, metalness: 0.02 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x1a1e27, roughness: 0.95, metalness: 0.02 });
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f1116 });
+      const root = new THREE.Group();
+      const addPart = (geo, mat, x, y, z) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        root.add(m);
+      };
+
+      addPart(new THREE.BoxGeometry(0.56, 0.56, 0.56), skinMat, 0, 1.52, 0);
+      addPart(new THREE.BoxGeometry(0.58, 0.16, 0.58), hairMat, 0, 1.8, 0);
+      addPart(new THREE.BoxGeometry(0.64, 0.24, 0.18), hairMat, 0, 1.66, -0.2);
+      addPart(new THREE.BoxGeometry(0.12, 0.12, 0.02), eyeMat, -0.12, 1.54, -0.285);
+      addPart(new THREE.BoxGeometry(0.12, 0.12, 0.02), eyeMat, 0.12, 1.54, -0.285);
+      addPart(new THREE.BoxGeometry(0.62, 0.58, 0.34), shirtMat, 0, 1.08, 0);
+      addPart(new THREE.BoxGeometry(0.2, 0.52, 0.2), shirtMat, -0.44, 1.1, 0);
+      addPart(new THREE.BoxGeometry(0.2, 0.52, 0.2), shirtMat, 0.44, 1.1, 0);
+      addPart(new THREE.BoxGeometry(0.2, 0.56, 0.22), pantsMat, -0.18, 0.54, 0);
+      addPart(new THREE.BoxGeometry(0.2, 0.56, 0.22), pantsMat, 0.18, 0.54, 0);
+      addPart(new THREE.BoxGeometry(0.22, 0.11, 0.28), shoeMat, -0.18, 0.22, 0.03);
+      addPart(new THREE.BoxGeometry(0.22, 0.11, 0.28), shoeMat, 0.18, 0.22, 0.03);
+      return root;
     }
 
     function applyLockedBasesFromWorld(list) {
@@ -5795,25 +5869,26 @@
       if (batHitBusy || !multiplayer.connected) return false;
       ensureBatState();
       if (state.carriedSteal && String(state.carriedSteal.itemType || "block") === "creature") {
-        state.info = "You cannot swing a bat while carrying a stolen creature.";
+        state.info = "You cannot use PvP gear while carrying a stolen creature.";
         updateUI();
         return false;
       }
       const bat = getBatDef(state.equippedBat);
+      const abilityLabel = currentCombatLabel();
       const now = realNowSec();
       if (Number(state.batCooldownUntil || 0) > now) {
-        state.info = `${bat.label} cooldown: ${formatNumber(state.batCooldownUntil - now)}s`;
+        state.info = `${abilityLabel} cooldown: ${formatNumber(state.batCooldownUntil - now)}s`;
         updateUI();
         return false;
       }
       if (Number(state.stunUntil || 0) > now) {
-        state.info = "You are stunned and cannot swing.";
+        state.info = `You are stunned and cannot use ${abilityLabel}.`;
         updateUI();
         return false;
       }
       const target = getClosestBatTarget(3.1);
       if (!target) {
-        state.info = "No player in bat range.";
+        state.info = "No player in range.";
         updateUI();
         return false;
       }
@@ -5824,12 +5899,13 @@
           targetPlayerId: target.playerId,
           serverId: multiplayer.serverId
         });
-        state.batCooldownUntil = Number(data?.cooldownUntil || (now + Number(bat.cooldownSec || 1.2)));
-        state.info = `Hit ${target.tag} with ${String(data?.batLabel || bat.label)}.${data?.canceledSteal ? " Steal interrupted." : ""}`;
+        const fallbackCooldown = isFreezeRayEquipped() ? Number(FREEZE_RAY_DEF.cooldownSec || 20) : Number(bat.cooldownSec || 1.2);
+        state.batCooldownUntil = Number(data?.cooldownUntil || (now + fallbackCooldown));
+        state.info = `Hit ${target.tag} with ${String(data?.batLabel || data?.abilityLabel || abilityLabel)}.${data?.canceledSteal ? " Steal interrupted." : ""}`;
         updateUI();
         return true;
       } catch (err) {
-        state.info = String(err?.payload?.error || err?.message || "Bat hit failed.");
+        state.info = String(err?.payload?.error || err?.message || "PvP action failed.");
         updateUI();
       } finally {
         batHitBusy = false;
@@ -6358,10 +6434,10 @@
         get prompt() {
           const p = pickClosestPlotForAnywhere();
           if (!p) return "";
-          if (p.stage === 2) return "[E] Harvest nearest crop";
+          if (p.stage === 2) return "[E] Harvest crop";
           if (p.stage === 0) {
             if (state.seeds < 1) return "No seeds to plant";
-            return "[E] Plant seed anywhere in your plot";
+            return "[E] Plant seed";
           }
           const label = p.seedRank ? p.seedRank.label : "Seed";
           const elapsed = (performance.now() / 1000 - p.plantedAt) * (1 + state.fertilizerTier * 0.04) * rebirthGrowthMult();
@@ -7160,12 +7236,13 @@
       }
       const hitTarget = getClosestBatTarget();
       if (hitTarget) {
-        const bat = getBatDef(state.equippedBat);
+        const abilityLabel = currentCombatLabel();
+        const cooldownBase = isFreezeRayEquipped() ? Number(FREEZE_RAY_DEF.cooldownSec || 20) : Number(getBatDef(state.equippedBat).cooldownSec || 1.5);
         const cooldownLeft = Math.max(0, Number(state.batCooldownUntil || 0) - now);
         if (cooldownLeft > 0.01) {
-          setPrompt(`[R] ${bat.label} cooldown ${formatNumber(cooldownLeft)}s`);
+          setPrompt(`[R] ${abilityLabel} cooldown ${formatNumber(cooldownLeft)}s`);
         } else {
-          setPrompt(`[R] Hit ${hitTarget.tag} with ${bat.label}`);
+          setPrompt(`[R] Hit ${hitTarget.tag} with ${abilityLabel} (${formatNumber(cooldownBase)}s cd)`);
         }
         return;
       }
@@ -7499,6 +7576,9 @@
     }
 
     function renderCosmeticsPanel() {
+      const freezeOwned = !!state.freezeRayOwned;
+      const freezeEquipped = isFreezeRayEquipped();
+      const freezeCanBuy = state.rebirths >= FREEZE_RAY_DEF.minRebirth && state.stardust >= FREEZE_RAY_DEF.stardustCost;
       const cards = BAT_DEFS.map((bat) => {
         const owned = !!state.batsOwned?.[bat.key];
         const equipped = normalizeBatKey(state.equippedBat || "sprout") === bat.key;
@@ -7509,10 +7589,10 @@
             <div class="shopOdds">
               <span>Stun ${formatNumber(bat.stunSec)}s</span>
               <span>Cooldown ${formatNumber(bat.cooldownSec)}s</span>
-              <span>${owned ? "Owned" : "Locked"}</span>
+              <span>${owned ? (equipped && !freezeEquipped ? "Equipped" : "Owned") : "Locked"}</span>
             </div>
             ${owned
-              ? `<button class="shopPriceBtn cosmeticsBatEquipBtn" data-bat="${bat.key}">${equipped ? "EQUIPPED" : "EQUIP"}</button>`
+              ? `<button class="shopPriceBtn cosmeticsBatEquipBtn" data-bat="${bat.key}">${equipped && !freezeEquipped ? "EQUIPPED" : "EQUIP BAT"}</button>`
               : `<button class="shopPriceBtn cosmeticsBatBuyBtn" data-bat="${bat.key}"${state.money < bat.cost ? " disabled" : ""}>${formatMoney(bat.cost)}</button>`
             }
             <div class="shopPriceMeta">${owned ? "Use R (or HIT) in PvP." : "Buy and unlock this bat."}</div>
@@ -7521,7 +7601,21 @@
       }).join("");
 
       cosmeticsSummaryEl.innerHTML = `
-        <div style="font-size:12px;color:#d7e7ff;margin-bottom:8px">Cosmetics are separate from Shop. Bats are managed here.</div>
+        <div style="font-size:12px;color:#d7e7ff;margin-bottom:8px">Cosmetics are separate from Shop. Equip your PvP tool here.</div>
+        <div class="shopOfferCard stardust" style="margin-bottom:8px">
+          <div class="shopOfferTitle" style="font-size:26px">${FREEZE_RAY_DEF.label}</div>
+          <div class="shopOfferSub">${FREEZE_RAY_DEF.desc}</div>
+          <div class="shopOdds">
+            <span>Freeze ${formatNumber(FREEZE_RAY_DEF.stunSec)}s</span>
+            <span>Cooldown ${formatNumber(FREEZE_RAY_DEF.cooldownSec)}s</span>
+            <span>Cost: 💫 ${formatNumber(FREEZE_RAY_DEF.stardustCost)} | Rebirth ${formatNumber(FREEZE_RAY_DEF.minRebirth)}+</span>
+          </div>
+          ${freezeOwned
+            ? `<button class="shopPriceBtn cosmeticsFreezeEquipBtn">${freezeEquipped ? "EQUIPPED" : "EQUIP FREEZE RAY"}</button>`
+            : `<button class="shopPriceBtn cosmeticsFreezeBuyBtn"${freezeCanBuy ? "" : " disabled"}>BUY 💫 ${formatNumber(FREEZE_RAY_DEF.stardustCost)}</button>`
+          }
+          <div class="shopPriceMeta">${freezeOwned ? "R ability uses Freeze Ray while equipped." : (state.rebirths < FREEZE_RAY_DEF.minRebirth ? `Requires Rebirth ${formatNumber(FREEZE_RAY_DEF.minRebirth)}.` : "Unlock with Stardust.")}</div>
+        </div>
         <div class="shopOfferGrid">${cards}</div>
       `;
 
@@ -7531,6 +7625,7 @@
           const bat = getBatDef(key);
           ensureBatState();
           if (state.batsOwned[key]) {
+            state.equippedCombatTool = "bat";
             state.equippedBat = key;
             state.info = `${bat.label} equipped.`;
             updateUI();
@@ -7544,6 +7639,7 @@
           }
           state.money -= Number(bat.cost || 0);
           state.batsOwned[key] = true;
+          state.equippedCombatTool = "bat";
           state.equippedBat = key;
           state.info = `Unlocked ${bat.label} and equipped it.`;
           updateUI();
@@ -7555,11 +7651,40 @@
           const key = normalizeBatKey(btn.dataset.bat || "sprout");
           ensureBatState();
           if (!state.batsOwned[key]) return;
+          state.equippedCombatTool = "bat";
           state.equippedBat = key;
           state.info = `${getBatDef(key).label} equipped.`;
           updateUI();
           renderCosmeticsPanel();
         });
+      });
+      cosmeticsSummaryEl.querySelector(".cosmeticsFreezeBuyBtn")?.addEventListener("click", () => {
+        ensureBatState();
+        if (state.freezeRayOwned) return;
+        if (state.rebirths < FREEZE_RAY_DEF.minRebirth) {
+          state.info = `Freeze Ray requires Rebirth ${formatNumber(FREEZE_RAY_DEF.minRebirth)}.`;
+          updateUI();
+          return;
+        }
+        if (state.stardust < FREEZE_RAY_DEF.stardustCost) {
+          state.info = `Need 💫 ${formatNumber(FREEZE_RAY_DEF.stardustCost)} for Freeze Ray.`;
+          updateUI();
+          return;
+        }
+        state.stardust = Math.max(0, Number(state.stardust || 0) - FREEZE_RAY_DEF.stardustCost);
+        state.freezeRayOwned = true;
+        state.equippedCombatTool = "freezeray";
+        state.info = "Unlocked Freeze Ray and equipped it.";
+        updateUI();
+        renderCosmeticsPanel();
+      });
+      cosmeticsSummaryEl.querySelector(".cosmeticsFreezeEquipBtn")?.addEventListener("click", () => {
+        ensureBatState();
+        if (!state.freezeRayOwned) return;
+        state.equippedCombatTool = "freezeray";
+        state.info = "Freeze Ray equipped.";
+        updateUI();
+        renderCosmeticsPanel();
       });
     }
 
@@ -8169,7 +8294,7 @@
       const badge = `${name}${email ? ` (${email})` : ""}`;
       const blueMoon = isBlueMoonActive();
       ensureBatState();
-      const bat = getBatDef(state.equippedBat);
+      const abilityLabel = currentCombatLabel();
       const now = realNowSec();
       const batCd = Math.max(0, Number(state.batCooldownUntil || 0) - now);
       const stunLeft = Math.max(0, Number(state.stunUntil || 0) - now);
@@ -8183,7 +8308,7 @@
         <div class="row"><span class="label">Server</span><span class="stat">${multiplayer.serverName} (${multiplayer.serverId})</span></div>
         <div class="row"><span class="label">Personal Luck</span><span class="stat">x${formatNumber(state.personalLuck || 1)}</span></div>
         <div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>
-        <div class="row"><span class="label">Bat</span><span class="stat">${bat.label}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
+        <div class="row"><span class="label">PvP Tool</span><span class="stat">${abilityLabel}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
         <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? (stealPaused ? "Steal paused" : `Stealing ${formatNumber(stealLeft)}s`) : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
         <div class="row"><span class="label">Base Lock</span><span class="stat">${ownLockLeft > 0 ? `${formatNumber(ownLockLeft)}s left` : "Ready"}</span></div>
         <div class="row"><span class="label">Blue Moon</span><span class="stat">${blueMoon ? `ACTIVE (${formatDuration(wheelSecondsLeftThisEvent())} left)` : `in ${formatDuration(wheelSecondsUntilSpin())}`}</span></div>
