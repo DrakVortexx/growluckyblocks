@@ -1022,7 +1022,8 @@ async function getPlayerDoc(playerId, actor = null) {
   }
 }
 
-async function setPlayerDocMerge(playerId, patch, actor = null) {
+async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
+  const strict = !!(opts && opts.strict);
   const merged = mergePatch(playerCache.get(playerId) || {}, patch);
   playerCache.set(playerId, merged);
   try {
@@ -1049,6 +1050,7 @@ async function setPlayerDocMerge(playerId, patch, actor = null) {
         }
       }
     } catch (blobErr) {
+      if (strict) throw blobErr;
       console.error("setPlayerDocMerge degraded write", blobErr?.message || blobErr);
       // Keep gameplay alive even if Appwrite schema/permissions are not ready.
     }
@@ -1544,7 +1546,7 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
     }
 
     owner.data.pedestals = pedestals;
-    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null);
+    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null, { strict: true });
     serverState.activeSnapshots.set(ownerId, buildWorldSnapshot(owner.data || {}));
     if (restoredPedestalIndex !== sourceIdx) unlockRecentlyStolenPedestal(serverState, ownerId, sourceIdx);
     lockRecentlyStolenPedestal(serverState, ownerId, restoredPedestalIndex, {
@@ -1632,7 +1634,7 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
   }
 
   thiefDoc.data.pedestals = pedestals;
-  await setPlayerDocMerge(thief, { data: thiefDoc.data, updatedAt: Date.now() }, null);
+  await setPlayerDocMerge(thief, { data: thiefDoc.data, updatedAt: Date.now() }, null, { strict: true });
   serverState.activeSnapshots.set(thief, buildWorldSnapshot(thiefDoc.data || {}));
   serverState.carriedByThief.delete(thief);
 
@@ -1766,7 +1768,7 @@ async function completeSteal(serverState, steal) {
     }
 
     owner.data.pedestals = ownerPedestals;
-    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null);
+    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null, { strict: true });
     lockRecentlyStolenPedestal(serverState, ownerId, pedIndex, {
       mode: "stolen",
       maxPedestals,
