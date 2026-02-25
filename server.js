@@ -19,7 +19,7 @@ const ADMIN_USERNAME = "DrakVortexx";
 const DEFAULT_SERVER_ID = "public-1";
 const RANK_KEYS = new Set([
   "basic", "common", "rare", "epic", "legendary",
-  "mythic", "godly", "secret", "divine", "transcendent", "omniversal"
+  "mythic", "godly", "secret", "transcendent", "omniversal"
 ]);
 const SPECIAL_BLOCK_KEYS = new Set(["valentinesblock"]);
 const DAILY_STARDUST_LOOP = [
@@ -42,7 +42,6 @@ const STEAL_TIME_BY_RANK = Object.freeze({
   mythic: 50,
   godly: 90,
   secret: 180,
-  divine: 420,
   transcendent: 10800,
   omniversal: 43200
 });
@@ -97,9 +96,6 @@ const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Void Kraken", rankKey: "secret", rate: 1200000 },
   { name: "Ghost Unicorn", rankKey: "secret", rate: 2100000 },
   { name: "Arcane Tiger", rankKey: "secret", rate: 2950000 },
-  { name: "Angelic Lion", rankKey: "divine", rate: 22000000 },
-  { name: "Solar Dragon", rankKey: "divine", rate: 34000000 },
-  { name: "Mystic Owlbear", rankKey: "divine", rate: 48000000 },
   { name: "Infinity Serpent", rankKey: "transcendent", rate: 120000000 },
   { name: "Quantum Phoenix", rankKey: "transcendent", rate: 180000000 },
   { name: "Cosmic Whale", rankKey: "transcendent", rate: 245000000 },
@@ -473,10 +469,11 @@ function isValidCreatureNameForRank(rankKey, creatureName) {
 
 function normalizeRankKey(v) {
   const raw = String(v || "").trim().toLowerCase();
+  if (raw === "divine") return "transcendent";
   if (raw === "eternal" || raw === "eturnal") return "transcendent";
   if (raw === "uncommon") return "common";
   if (raw === "elite") return "rare";
-  if (raw === "prismatic" || raw === "apex" || raw === "ascended" || raw === "ancient" || raw === "celestial") return "divine";
+  if (raw === "prismatic" || raw === "apex" || raw === "ascended" || raw === "ancient" || raw === "celestial") return "transcendent";
   return raw;
 }
 

@@ -1719,7 +1719,7 @@
     <p><b>Interact:</b> E</p>
     <p><b>Sell Creature:</b> Walk up to a creature and press E</p>
     <p><b>Open Lucky Block:</b> F</p>
-    <p><b>Bat Hit:</b> R</p>
+    <p><b>Use pvp gear:</b> R</p>
     <p><b>Inventory:</b> ` (backtick) or Tab</p>
     <p><b>Global Chat:</b> Y</p>
     <p><b>Open Shop:</b> Q (near Seed Shack)</p>
@@ -1734,7 +1734,7 @@
     <div id="shopFunds" style="margin-bottom:10px;color:#ffeb9a"></div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
       <input id="shopSearch" class="authField" style="margin:0;padding:8px 10px" placeholder="Search shop items or ranks..." />
-      <span style="font-size:11px;color:#c9d8e6">Try: seed, luck, stardust, divine</span>
+      <span style="font-size:11px;color:#c9d8e6">Try: seed, luck, stardust, secret</span>
     </div>
     <div class="columns">
       <div class="card">
@@ -1771,10 +1771,48 @@
     </form>
   </div>
   <div id="adminPanel" class="panel">
-    <h3>Admin Console</h3>
-    <div style="font-size:12px;color:#c5d4ff;margin-bottom:6px">Commands: <b>luck &lt;amount&gt; server|global</b>, <b>event bluemoon [server|global] [seconds]</b>, <b>give &lt;username&gt; &lt;rarity|valentinesblock&gt; &lt;amount&gt; [mutation]</b>, <b>give stardust &lt;username&gt; &lt;amount&gt;</b>, <b>spawn &lt;creature&gt; server|global &lt;amount&gt;</b>, <b>reset &lt;username&gt;</b>, <b>tutorial reset &lt;username&gt;</b>, <b>broadcast &lt;message&gt;</b></div>
-    <input id="adminCmd" placeholder="luck 100" />
-    <button id="adminRun">Execute</button>
+    <h3>Admin Panel</h3>
+    <div style="font-size:12px;color:#c5d4ff;margin-bottom:8px">Run server controls without typing console commands.</div>
+    <div style="display:grid;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
+        <input id="adminLuckAmount" type="number" min="1" step="1" value="100" placeholder="Luck amount" />
+        <select id="adminLuckScope"><option value="server">server</option><option value="global">global</option></select>
+        <button id="adminLuckRun">Set Luck</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
+        <input id="adminEventSeconds" type="number" min="10" step="1" value="600" placeholder="Blue Moon seconds" />
+        <select id="adminEventScope"><option value="server">server</option><option value="global">global</option></select>
+        <button id="adminEventRun">Blue Moon</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:6px">
+        <input id="adminGiveUser" maxlength="24" placeholder="Player username" />
+        <input id="adminGiveRank" placeholder="Rarity or valentinesblock" />
+        <input id="adminGiveAmount" type="number" min="1" step="1" value="1" placeholder="Amount" />
+        <input id="adminGiveMutation" placeholder="Mutation (optional)" />
+        <button id="adminGiveRun">Give Block</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px">
+        <input id="adminDustUser" maxlength="24" placeholder="Player username" />
+        <input id="adminDustAmount" type="number" min="1" step="1" value="100" placeholder="Stardust amount" />
+        <button id="adminDustRun">Give Stardust</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px">
+        <input id="adminSpawnCreature" placeholder="Creature name" />
+        <select id="adminSpawnScope"><option value="server">server</option><option value="global">global</option></select>
+        <input id="adminSpawnAmount" type="number" min="1" max="100" step="1" value="1" placeholder="Amount" />
+        <button id="adminSpawnRun">Spawn</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px">
+        <input id="adminResetUser" maxlength="24" placeholder="Reset username" />
+        <button id="adminResetRun">Reset</button>
+        <input id="adminTutorialUser" maxlength="24" placeholder="Tutorial reset username" />
+        <button id="adminTutorialRun">Tutorial Reset</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+        <input id="adminBroadcastText" maxlength="160" placeholder="Broadcast message" />
+        <button id="adminBroadcastRun">Broadcast</button>
+      </div>
+    </div>
     <div id="adminMsg"></div>
   </div>
   <div id="settingsPanel" class="panel">
@@ -1874,7 +1912,6 @@
       { key: "mythic", label: "Mythic", min: 2000, max: 3000, weight: 1, color: "c-mythic" },
       { key: "godly", label: "Godly", min: 50000, max: 120000, weight: 0.1, color: "c-godly" },
       { key: "secret", label: "Secret", min: 1000000, max: 3000000, weight: 0.01, color: "c-secret" },
-      { key: "divine", label: "Divine", min: 20000000, max: 50000000, weight: 0.001, color: "c-divine" },
       { key: "transcendent", label: "Transcendent", min: 100000000, max: 250000000, weight: 0.0001, color: "c-transcendent" },
       { key: "omniversal", label: "Omniversal", min: 300000000, max: 900000000, weight: 0.00001, color: "c-omniversal" }
     ];
@@ -1895,7 +1932,6 @@
       mythic: [40, 70],
       godly: [70, 120],
       secret: [120, 240],
-      divine: [420, 720],
       transcendent: [10800, 21600],
       omniversal: [43200, 86400]
     };
@@ -1908,7 +1944,6 @@
       mythic: 1,
       godly: 0.1,
       secret: 0.01,
-      divine: 0.001,
       transcendent: 0.0001,
       omniversal: 0.00001
     };
@@ -1959,7 +1994,6 @@
       mythic: 50,
       godly: 90,
       secret: 180,
-      divine: 420,
       transcendent: 10800,
       omniversal: 43200
     });
@@ -2059,8 +2093,30 @@
     const chatFormEl = document.getElementById("chatForm");
     const chatInputEl = document.getElementById("chatInput");
     const adminPanelEl = document.getElementById("adminPanel");
-    const adminCmdEl = document.getElementById("adminCmd");
-    const adminRunEl = document.getElementById("adminRun");
+    const adminLuckAmountEl = document.getElementById("adminLuckAmount");
+    const adminLuckScopeEl = document.getElementById("adminLuckScope");
+    const adminLuckRunEl = document.getElementById("adminLuckRun");
+    const adminEventSecondsEl = document.getElementById("adminEventSeconds");
+    const adminEventScopeEl = document.getElementById("adminEventScope");
+    const adminEventRunEl = document.getElementById("adminEventRun");
+    const adminGiveUserEl = document.getElementById("adminGiveUser");
+    const adminGiveRankEl = document.getElementById("adminGiveRank");
+    const adminGiveAmountEl = document.getElementById("adminGiveAmount");
+    const adminGiveMutationEl = document.getElementById("adminGiveMutation");
+    const adminGiveRunEl = document.getElementById("adminGiveRun");
+    const adminDustUserEl = document.getElementById("adminDustUser");
+    const adminDustAmountEl = document.getElementById("adminDustAmount");
+    const adminDustRunEl = document.getElementById("adminDustRun");
+    const adminSpawnCreatureEl = document.getElementById("adminSpawnCreature");
+    const adminSpawnScopeEl = document.getElementById("adminSpawnScope");
+    const adminSpawnAmountEl = document.getElementById("adminSpawnAmount");
+    const adminSpawnRunEl = document.getElementById("adminSpawnRun");
+    const adminResetUserEl = document.getElementById("adminResetUser");
+    const adminResetRunEl = document.getElementById("adminResetRun");
+    const adminTutorialUserEl = document.getElementById("adminTutorialUser");
+    const adminTutorialRunEl = document.getElementById("adminTutorialRun");
+    const adminBroadcastTextEl = document.getElementById("adminBroadcastText");
+    const adminBroadcastRunEl = document.getElementById("adminBroadcastRun");
     const adminMsgEl = document.getElementById("adminMsg");
     const settingsPanelEl = document.getElementById("settingsPanel");
     const settingsDeviceEl = document.getElementById("settingsDevice");
@@ -2157,7 +2213,6 @@
       mythic: ["Celestial Cat", "Moon Serpent", "Starry Elk"],
       godly: ["Omnisphinx", "Thunder Behemoth", "Eternal Fox"],
       secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger"],
-      divine: ["Angelic Lion", "Solar Dragon", "Mystic Owlbear"],
       transcendent: ["Infinity Serpent", "Quantum Phoenix", "Cosmic Whale"],
       omniversal: ["Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
     };
@@ -2250,11 +2305,11 @@
       const legacyMap = {
         uncommon: "common",
         elite: "rare",
-        prismatic: "divine",
-        apex: "divine",
-        ascended: "divine",
-        ancient: "divine",
-        celestial: "divine",
+        prismatic: "transcendent",
+        apex: "transcendent",
+        ascended: "transcendent",
+        ancient: "transcendent",
+        celestial: "transcendent",
         eternal: "transcendent",
         eturnal: "transcendent"
       };
@@ -2274,7 +2329,6 @@
       "celestial cat": 2100, "moon serpent": 2550, "starry elk": 2980,
       "omnisphinx": 52000, "thunder behemoth": 84000, "eternal fox": 118000,
       "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
-      "angelic lion": 22000000, "solar dragon": 34000000, "mystic owlbear": 48000000,
       "infinity serpent": 120000000, "quantum phoenix": 180000000, "cosmic whale": 245000000,
       "mystery cat": 700000000, "universe hydra": 620000000, "multiverse dragon": 880000000
     };
@@ -2583,10 +2637,11 @@
     function normalizeBlockKey(key) {
       const k = String(key || "").trim().toLowerCase();
       if (!k) return "basic";
+      if (k === "divine") return "transcendent";
       if (k === "eternal" || k === "eturnal") return "transcendent";
       if (k === "uncommon") return "common";
       if (k === "elite") return "rare";
-      if (k === "prismatic" || k === "apex" || k === "ascended" || k === "ancient" || k === "celestial") return "divine";
+      if (k === "prismatic" || k === "apex" || k === "ascended" || k === "ancient" || k === "celestial") return "transcendent";
       if (SPECIAL_BLOCK_MAP[k]) return k;
       return getRankByKey(k).key;
     }
@@ -3356,9 +3411,9 @@
         case 5:
           return "Press E on an empty pedestal to place your Lucky Block.";
         case 6:
-          return "Press F on the placed Lucky Block to open it.";
+          return "Press F on the placed Lucky Block to open it and get a creature.";
         case 7:
-          return "Tutorial complete. Have fun and continue building your farm.";
+          return "Tutorial complete. Have fun and continue building your creature collection.";
         default:
           return "";
       }
@@ -3938,7 +3993,7 @@
         const v = Math.random();
         if (v < 0.60) return getRankByKey("godly");
         if (v < 0.90) return getRankByKey("secret");
-        return getRankByKey("divine");
+        return getRankByKey("transcendent");
       }
       const seedKey = blockMeta.isSpecial ? blockMeta.rankForFx : blockMeta.key;
       const idx = Math.max(0, RANKS.findIndex((r) => r.key === seedKey));
@@ -4325,9 +4380,9 @@
       adminMsgEl.style.color = good ? "#9dffc7" : "#ffc8c8";
     }
 
-    async function runAdminCommand() {
+    async function runAdminCommand(commandText = "") {
       if (!multiplayer.isAdmin) return;
-      const cmd = String(adminCmdEl.value || "").trim();
+      const cmd = String(commandText || "").trim();
       if (!cmd) {
         setAdminMessage("Enter a command.");
         return;
@@ -8516,9 +8571,70 @@
         multiplayer.ws.send(JSON.stringify({ type: "chat-send", text }));
         chatInputEl.value = "";
       });
-      adminRunEl.addEventListener("click", runAdminCommand);
-      adminCmdEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") runAdminCommand();
+      adminLuckRunEl?.addEventListener("click", () => {
+        const amount = Math.max(1, Math.floor(Number(adminLuckAmountEl?.value || 0)));
+        const scope = String(adminLuckScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
+        void runAdminCommand(`luck ${amount} ${scope}`);
+      });
+      adminEventRunEl?.addEventListener("click", () => {
+        const seconds = Math.max(10, Math.floor(Number(adminEventSecondsEl?.value || 600)));
+        const scope = String(adminEventScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
+        void runAdminCommand(`event bluemoon ${scope} ${seconds}`);
+      });
+      adminGiveRunEl?.addEventListener("click", () => {
+        const username = String(adminGiveUserEl?.value || "").trim();
+        const rank = String(adminGiveRankEl?.value || "").trim().toLowerCase();
+        const amount = Math.max(1, Math.floor(Number(adminGiveAmountEl?.value || 1)));
+        const mutation = String(adminGiveMutationEl?.value || "").trim().toLowerCase();
+        if (!username || !rank) {
+          setAdminMessage("Enter player and rarity for Give Block.");
+          return;
+        }
+        const cmd = mutation ? `give ${username} ${rank} ${amount} ${mutation}` : `give ${username} ${rank} ${amount}`;
+        void runAdminCommand(cmd);
+      });
+      adminDustRunEl?.addEventListener("click", () => {
+        const username = String(adminDustUserEl?.value || "").trim();
+        const amount = Math.max(1, Math.floor(Number(adminDustAmountEl?.value || 1)));
+        if (!username) {
+          setAdminMessage("Enter player for Give Stardust.");
+          return;
+        }
+        void runAdminCommand(`give stardust ${username} ${amount}`);
+      });
+      adminSpawnRunEl?.addEventListener("click", () => {
+        const creature = String(adminSpawnCreatureEl?.value || "").trim();
+        const scope = String(adminSpawnScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
+        const amount = Math.max(1, Math.floor(Number(adminSpawnAmountEl?.value || 1)));
+        if (!creature) {
+          setAdminMessage("Enter creature name for Spawn.");
+          return;
+        }
+        void runAdminCommand(`spawn ${creature} ${scope} ${amount}`);
+      });
+      adminResetRunEl?.addEventListener("click", () => {
+        const username = String(adminResetUserEl?.value || "").trim();
+        if (!username) {
+          setAdminMessage("Enter player for Reset.");
+          return;
+        }
+        void runAdminCommand(`reset ${username}`);
+      });
+      adminTutorialRunEl?.addEventListener("click", () => {
+        const username = String(adminTutorialUserEl?.value || "").trim();
+        if (!username) {
+          setAdminMessage("Enter player for Tutorial Reset.");
+          return;
+        }
+        void runAdminCommand(`tutorial reset ${username}`);
+      });
+      adminBroadcastRunEl?.addEventListener("click", () => {
+        const text = String(adminBroadcastTextEl?.value || "").trim();
+        if (!text) {
+          setAdminMessage("Enter message for Broadcast.");
+          return;
+        }
+        void runAdminCommand(`broadcast ${text}`);
       });
       sellCreatureNoEl.addEventListener("click", closeSellCreatureModal);
       sellCreatureYesEl.addEventListener("click", () => {
