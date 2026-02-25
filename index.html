@@ -2459,11 +2459,10 @@
       {
         id: "seed-pack",
         label: "Seed Bag (+5)",
-        basePrice: 40,
-        getPrice: () => Math.ceil(40 * Math.pow(1.17, state.seedTier)),
+        basePrice: 100,
+        getPrice: () => 100,
         buy: () => {
           state.seeds += 5 + state.seedYieldBonus;
-          state.seedTier += 1;
           state.info = "Bought a seed bag.";
           tutorialTrigger("buy-seeds");
         }
@@ -5670,7 +5669,12 @@
           return true;
         }
       } catch (err) {
-        state.info = String(err?.payload?.error || err?.message || "Could not start steal.");
+        const lockLeft = Number(err?.payload?.lockRemainingSec || 0);
+        if (lockLeft > 0) {
+          state.info = `That base is locked for ${formatNumber(lockLeft)}s.`;
+        } else {
+          state.info = String(err?.payload?.error || err?.message || "Could not start steal.");
+        }
         updateUI();
       } finally {
         stealStartBusy = false;
@@ -6517,6 +6521,64 @@
 
     function buildLuckyPedestals() {
       ensureBarnFloors(1);
+      buildBaseLockPad();
+    }
+
+    function buildBaseLockPad() {
+      const dx = slotOffsetX(multiplayer.slot);
+      const x = -5.8 + dx + 2.9 * 2;
+      const z = -12.8 + 2.9 * 0.5;
+      if (baseLockInteractable) baseLockInteractable.dead = true;
+      if (baseLockPadMesh) {
+        clearMeshLabel(baseLockPadMesh);
+        scene.remove(baseLockPadMesh);
+        baseLockPadMesh = null;
+      }
+      if (baseLockPadGlow) {
+        scene.remove(baseLockPadGlow);
+        baseLockPadGlow = null;
+      }
+      baseLockPadLabelSig = "";
+
+      baseLockPadMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.65, 0.28, 24),
+        new THREE.MeshStandardMaterial({
+          color: 0x3d7dca,
+          emissive: 0x0d2a4d,
+          emissiveIntensity: 0.35,
+          roughness: 0.45,
+          metalness: 0.2
+        })
+      );
+      baseLockPadMesh.position.set(x, 0.52, z);
+      baseLockPadMesh.castShadow = true;
+      baseLockPadMesh.receiveShadow = true;
+      scene.add(baseLockPadMesh);
+
+      baseLockPadGlow = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.78, 0.78, 0.03, 24),
+        new THREE.MeshBasicMaterial({ color: 0x63a7ff, transparent: true, opacity: 0.2 })
+      );
+      baseLockPadGlow.position.set(x, 0.305, z);
+      scene.add(baseLockPadGlow);
+
+      const center = new THREE.Vector3(x, 0, z);
+      baseLockInteractable = registerInteractable({
+        name: "Base Lock",
+        position: center,
+        radius: 1.9,
+        priority: 0.35,
+        get prompt() {
+          const rem = ownBaseLockRemainingSec();
+          if (rem > 0) return `Base locked (${formatNumber(rem)}s left)`;
+          return `[E] Lock base for ${formatNumber(ownBaseLockDurationSec())}s`;
+        },
+        interact(code) {
+          if (code !== "KeyE") return;
+          void activateBaseLock();
+        }
+      });
+      updateBaseLockPadVisual();
     }
 
     function creatureArchetypeFromName(creatureName = "") {
@@ -7615,7 +7677,7 @@
       shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Personal Luck: x${formatNumber(state.personalLuck || 1)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
 
       const seedPack = corePurchases[0];
-      const seedPrice = seedPack ? seedPack.getPrice() : 40;
+      const seedPrice = seedPack ? seedPack.getPrice() : 100;
       const targetLuck = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.luckShopTarget || 1000))));
       const personalLuck = Math.max(1, Math.floor(Number(state.personalLuck || 1)));
       const personalLuckUnlocked = Math.max(personalLuck, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuckUnlocked || personalLuck))));
@@ -7660,7 +7722,7 @@
             <div class="shopOdds">
               <span>Bag: +${formatNumber(5 + state.seedYieldBonus)}</span>
               <span>Owned: ${formatNumber(state.seeds)}</span>
-              <span>Tier: ${formatNumber(state.seedTier)}</span>
+              <span>Price: ${formatMoney(seedPrice)} each</span>
             </div>
             <button id="shopBuySeedPack" class="shopPriceBtn"${state.money < seedPrice ? " disabled" : ""}>${formatMoney(seedPrice)}</button>
             <div class="shopPriceMeta">${state.money >= seedPrice ? "Ready to buy" : "Need more money"}</div>
@@ -8071,6 +8133,9 @@
       const batCd = Math.max(0, Number(state.batCooldownUntil || 0) - now);
       const stunLeft = Math.max(0, Number(state.stunUntil || 0) - now);
       const stealLeft = state.activeSteal ? getStealRemainingSeconds(state.activeSteal) : 0;
+      const stealPaused = isActiveStealPaused() && stealLeft > 0.01;
+      const ownLockLeft = ownBaseLockRemainingSec();
+      updateBaseLockPadVisual();
       dockAdminBtn.style.display = multiplayer.isAdmin ? "block" : "none";
       hud.innerHTML = `
         <div class="row"><span class="label">Profile</span><span class="stat">${badge}</span></div>
@@ -8078,7 +8143,8 @@
         <div class="row"><span class="label">Personal Luck</span><span class="stat">x${formatNumber(state.personalLuck || 1)}</span></div>
         <div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>
         <div class="row"><span class="label">Bat</span><span class="stat">${bat.label}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
-        <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? `Stealing ${formatNumber(stealLeft)}s` : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
+        <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? (stealPaused ? "Steal paused" : `Stealing ${formatNumber(stealLeft)}s`) : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
+        <div class="row"><span class="label">Base Lock</span><span class="stat">${ownLockLeft > 0 ? `${formatNumber(ownLockLeft)}s left` : "Ready"}</span></div>
         <div class="row"><span class="label">Blue Moon</span><span class="stat">${blueMoon ? `ACTIVE (${formatDuration(wheelSecondsLeftThisEvent())} left)` : `in ${formatDuration(wheelSecondsUntilSpin())}`}</span></div>
         <div class="row"><span class="label">Friend Boost</span><span class="stat">+${Math.min(30, multiplayer.occupiedSlots.length * 2)}%</span></div>
         <div class="moneyMain" style="font-size:40px;line-height:1;color:#ffe7a0;text-shadow:0 2px 0 rgba(0,0,0,0.35)">${formatMoney(state.money)}</div>
@@ -8586,6 +8652,7 @@
           multiplayer.forcedBlueMoonUntil = Number(msg.forcedBlueMoonUntil || 0);
           multiplayer.forcedBlueMoonEventId = String(msg.forcedBlueMoonEventId || "");
           multiplayer.spawnDrops = Array.isArray(msg.spawnDrops) ? msg.spawnDrops : [];
+          applyLockedBasesFromWorld(msg.lockedBases);
           multiplayer.players = Array.isArray(msg.players) ? msg.players : multiplayer.players;
           renderRemoteFields();
           updateUI();
@@ -8613,6 +8680,9 @@
         if (msg?.type === "steal-start") {
           if (msg?.steal && String(msg.steal.thiefId || "") === multiplayer.playerId) {
             state.activeSteal = msg.steal;
+            state.activeSteal.paused = !!state.activeSteal.paused;
+            state.activeSteal.pauseReason = String(state.activeSteal.pauseReason || "");
+            state.activeSteal.remainingMs = Number(state.activeSteal.remainingMs || (getStealRemainingSeconds(state.activeSteal) * 1000));
             const kind = String(msg?.steal?.itemType || "block");
             if (kind === "creature") {
               state.info = `Steal started: ${String(msg?.steal?.creatureName || "Creature")} (${formatNumber(getStealRemainingSeconds(state.activeSteal))}s).`;
@@ -8635,6 +8705,29 @@
             } else {
               const meta = blockMetaByKey(steal.blockRankKey || "basic");
               state.info = `${thiefTag} is stealing your ${meta.label} block!`;
+            }
+            updateUI();
+          }
+          return;
+        }
+        if (msg?.type === "steal-progress") {
+          const thiefMe = String(msg.thiefId || "") === multiplayer.playerId;
+          if (thiefMe && state.activeSteal && String(state.activeSteal.id || "") === String(msg.stealId || "")) {
+            const remainingMs = Math.max(0, Number(msg.remainingMs || 0));
+            const paused = !!msg.paused;
+            state.activeSteal.remainingMs = remainingMs;
+            state.activeSteal.paused = paused;
+            state.activeSteal.pauseReason = String(msg.pauseReason || "");
+            state.activeSteal.lockRemainingSec = Math.max(0, Number(msg.lockRemainingSec || 0));
+            if (paused) {
+              state.activeSteal.endAt = Date.now() + remainingMs;
+              if (state.activeSteal.pauseReason === "locked") {
+                state.info = `Steal paused: target base locked${state.activeSteal.lockRemainingSec > 0 ? ` (${formatNumber(state.activeSteal.lockRemainingSec)}s)` : ""}.`;
+              } else {
+                state.info = "Steal paused: move closer to the target pedestal.";
+              }
+            } else {
+              state.activeSteal.endAt = Date.now() + remainingMs;
             }
             updateUI();
           }
@@ -8854,8 +8947,19 @@
         if (Number.isFinite(Number(joined.serverLuck))) multiplayer.serverLuck = Math.max(1, Number(joined.serverLuck));
         multiplayer.forcedBlueMoonUntil = Number(joined.forcedBlueMoonUntil || 0);
         multiplayer.forcedBlueMoonEventId = String(joined.forcedBlueMoonEventId || "");
+        applyLockedBasesFromWorld(joined.lockedBases);
+        const ownLockUntil = Number(joined.baseLockUntil || 0);
+        if (ownLockUntil > realNowSec()) {
+          multiplayer.baseLocks = multiplayer.baseLocks || {};
+          multiplayer.baseLocks[multiplayer.playerId] = ownLockUntil;
+        }
         state.stunUntil = Math.max(0, Number(joined.stunUntil || 0));
         state.activeSteal = joined.activeSteal && typeof joined.activeSteal === "object" ? joined.activeSteal : null;
+        if (state.activeSteal) {
+          state.activeSteal.paused = !!state.activeSteal.paused;
+          state.activeSteal.pauseReason = String(state.activeSteal.pauseReason || "");
+          state.activeSteal.remainingMs = Number(state.activeSteal.remainingMs || (getStealRemainingSeconds(state.activeSteal) * 1000));
+        }
         state.carriedSteal = normalizeCarriedPayload(joined?.carried || null);
         multiplayer.spawnDrops = Array.isArray(joined?.spawnDrops) ? joined.spawnDrops : [];
         if (Array.isArray(joined.occupiedSlots)) multiplayer.occupiedSlots = joined.occupiedSlots;
@@ -9023,6 +9127,7 @@
         multiplayer.isAdmin = false;
         multiplayer.chatMessages = [];
         multiplayer.remoteSnapshots = {};
+        multiplayer.baseLocks = {};
         multiplayer.connected = false;
         multiplayer.serverId = "public-1";
         multiplayer.serverName = "Public #1";
