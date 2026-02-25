@@ -122,6 +122,47 @@
 
     #prompt.show { opacity: 1; }
 
+    #statusTimers {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 52;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .statusTimerItem {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 118px;
+      padding: 6px 9px;
+      border-radius: 11px;
+      border: 1px solid rgba(191, 224, 255, 0.45);
+      background: rgba(8, 16, 27, 0.84);
+      color: #ecf5ff;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+      white-space: nowrap;
+    }
+
+    .statusTimerIcon {
+      width: 20px;
+      text-align: center;
+      font-size: 16px;
+    }
+
+    .statusTimerValue {
+      font-family: "Exo 2", "Rajdhani", sans-serif;
+      letter-spacing: 0.35px;
+      font-size: 17px;
+      color: #f4f8ff;
+    }
+
     #tutorialPanel {
       left: 50%;
       top: 84px;
@@ -1530,6 +1571,16 @@
         font-size: 14px;
         padding: 12px;
       }
+      #statusTimers {
+        right: 8px;
+        bottom: calc(8px + 21vh);
+      }
+      .statusTimerItem {
+        min-width: 108px;
+        padding: 5px 8px;
+        font-size: 12px;
+      }
+      .statusTimerValue { font-size: 15px; }
       #inventory,
       #cosmeticsPanel,
       #chatPanel,
@@ -1635,6 +1686,10 @@
       .shopTab.gear, .shopTab.money { font-size: 17px; }
       .shopTab.close { width: 44px; font-size: 28px; }
       .shopSectionLabel { font-size: 28px; }
+      #statusTimers {
+        right: 6px;
+        bottom: calc(8px + 22vh);
+      }
     }
   </style>
 </head>
@@ -1698,6 +1753,7 @@
     <button id="dockLogout" class="dockBtn logout">Logout</button>
   </div>
   <div id="hud" class="panel"></div>
+  <div id="statusTimers" aria-live="polite"></div>
   <div id="prompt"></div>
   <div id="tutorialPanel" class="panel">
     <div id="tutorialHeader">
@@ -1965,25 +2021,31 @@
       { usd: "$99.99", base: 10000, bonus: 0, tag: "" }
     ];
     const SERVER_LUCK_STARDUST_PACKS = [
-      { luck: 100, stardust: 25, tag: "" },
-      { luck: 300, stardust: 90, tag: "" },
-      { luck: 1000, stardust: 220, tag: "POPULAR" },
-      { luck: 3000, stardust: 700, tag: "BEST VALUE" },
-      { luck: 10000, stardust: 2200, tag: "" },
-      { luck: 100000, stardust: 6000, tag: "" }
+      { luck: 10, stardust: 100, tag: "" },
+      { luck: 25, stardust: 250, tag: "" },
+      { luck: 50, stardust: 500, tag: "" },
+      { luck: 100, stardust: 1000, tag: "POPULAR" },
+      { luck: 300, stardust: 3000, tag: "" },
+      { luck: 1000, stardust: 10000, tag: "BEST VALUE" },
+      { luck: 3000, stardust: 30000, tag: "" },
+      { luck: 10000, stardust: 100000, tag: "" },
+      { luck: 100000, stardust: 1000000, tag: "" }
     ];
     const PERSONAL_LUCK_STARDUST_PACKS = [
-      { luck: 1000, stardust: 40, tag: "" },
-      { luck: 5000, stardust: 200, tag: "" },
-      { luck: 10000, stardust: 400, tag: "POPULAR" },
-      { luck: 25000, stardust: 1000, tag: "" },
-      { luck: 50000, stardust: 2000, tag: "BEST VALUE" },
-      { luck: 100000, stardust: 4000, tag: "" }
+      { luck: 10, stardust: 100, tag: "" },
+      { luck: 25, stardust: 250, tag: "" },
+      { luck: 50, stardust: 500, tag: "" },
+      { luck: 100, stardust: 1000, tag: "POPULAR" },
+      { luck: 300, stardust: 3000, tag: "" },
+      { luck: 1000, stardust: 10000, tag: "BEST VALUE" },
+      { luck: 3000, stardust: 30000, tag: "" },
+      { luck: 10000, stardust: 100000, tag: "" },
+      { luck: 100000, stardust: 1000000, tag: "" }
     ];
     const MAX_REBIRTHS = 10;
     const PERSONAL_LUCK_MAX = 100000;
-    const PERSONAL_LUCK_MIN_UNLOCK_TARGET = 1000;
-    const PERSONAL_LUCK_STARDUST_RATE = 0.04;
+    const PERSONAL_LUCK_MIN_UNLOCK_TARGET = 10;
+    const PERSONAL_LUCK_STARDUST_RATE = 10;
     const ENABLE_LEGACY_RANK_MIGRATION = false;
     const STEAL_TIME_BY_RANK = Object.freeze({
       basic: 4,
@@ -2016,6 +2078,7 @@
     const canvas = document.getElementById("game");
     const crosshairEl = document.getElementById("crosshair");
     const hud = document.getElementById("hud");
+    const statusTimersEl = document.getElementById("statusTimers");
     const promptEl = document.getElementById("prompt");
     const shopEl = document.getElementById("shop");
     const closeShopBtn = document.getElementById("closeShop");
@@ -2189,6 +2252,7 @@
       serverId: "public-1",
       serverName: "Public #1",
       serverLuck: 1,
+      serverLuckUntil: 0,
       forcedBlueMoonUntil: 0,
       forcedBlueMoonEventId: "",
       slot: 0,
@@ -2445,7 +2509,7 @@
       stunUntil: 0,
       activeSteal: null,
       carriedSteal: null,
-      luckShopTarget: 1000,
+      luckShopTarget: 10,
       inventoryQuery: "",
       inventoryFocus: "",
       inventoryTab: "lucky",
@@ -2604,6 +2668,43 @@
       if (seconds < 60) return `${formatNumber(seconds)} sec`;
       if (seconds < 3600) return `${formatNumber(seconds / 60)} min`;
       return `${formatNumber(seconds / 3600)} hr`;
+    }
+
+    function formatClockSeconds(seconds) {
+      const total = Math.max(0, Math.floor(Number(seconds || 0)));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+
+    function renderStatusTimers() {
+      if (!statusTimersEl) return;
+      const nowSec = realNowSec();
+      const rows = [];
+      const serverLuck = Math.max(1, Number(multiplayer.serverLuck || 1));
+      const luckLeft = Math.max(0, Math.ceil(Number(multiplayer.serverLuckUntil || 0) - nowSec));
+      if (serverLuck > 1 && luckLeft > 0) {
+        rows.push({ icon: "🍀", value: formatClockSeconds(luckLeft), title: `Server Luck x${formatNumber(serverLuck)}` });
+      }
+      const moonInfo = blueMoonWindowInfo(nowSec);
+      if (moonInfo.active) {
+        rows.push({ icon: "🌙", value: formatClockSeconds(moonInfo.secondsToEnd), title: "Blue Moon Active" });
+      } else {
+        rows.push({ icon: "🌙", value: formatClockSeconds(moonInfo.secondsToStart), title: "Blue Moon In" });
+      }
+      const lockLeft = ownBaseLockRemainingSec();
+      if (lockLeft > 0) {
+        rows.push({ icon: "🔒", value: formatClockSeconds(lockLeft), title: "Base Lock" });
+      }
+      statusTimersEl.innerHTML = rows.map((row) => `
+        <div class="statusTimerItem" title="${String(row.title || "")}">
+          <span class="statusTimerIcon">${row.icon}</span>
+          <span class="statusTimerValue">${row.value}</span>
+        </div>
+      `).join("");
+      statusTimersEl.style.display = rows.length ? "flex" : "none";
     }
 
     function formatRange(min, max) {
@@ -4405,6 +4506,7 @@
           }
           const data = await apiJson("/api/admin/luck", "POST", { amount, serverId: multiplayer.serverId, scope }, token);
           multiplayer.serverLuck = Math.max(1, Number(data.serverLuck || multiplayer.serverLuck || 1));
+          multiplayer.serverLuckUntil = Number(data.serverLuckUntil || multiplayer.serverLuckUntil || 0);
           if (data.scope === "global") {
             setAdminMessage(`Global luck set to x${multiplayer.serverLuck} across ${Number(data.affectedServers || 0)} server(s).`, true);
             state.info = `Admin command: global server luck x${multiplayer.serverLuck}`;
@@ -8037,8 +8139,8 @@
               <span>Live server: x${formatNumber(multiplayer.serverLuck || 1)}</span>
               <span>All players in server affected</span>
             </div>
-            <button class="shopPriceBtn serverLuckStardustBtn" data-stardust="25" data-luck="100"${state.stardust < 25 ? " disabled" : ""}>BUY 💫 ${formatNumber(25)}</button>
-            <div class="shopPriceMeta">${state.stardust >= 25 ? "Buy now with Stardust" : "Need more Stardust"}</div>
+            <button class="shopPriceBtn serverLuckStardustBtn" data-stardust="100" data-luck="10"${state.stardust < 100 ? " disabled" : ""}>BUY 💫 ${formatNumber(100)}</button>
+            <div class="shopPriceMeta">${state.stardust >= 100 ? "Buy now with Stardust" : "Need more Stardust"}</div>
           </div>
         </div>
       `;
@@ -8319,7 +8421,7 @@
     }
 
     async function buyServerLuckInShop(targetLuck, localCost = 0) {
-      const target = Math.max(2, Math.floor(Number(targetLuck) || 2));
+      const target = Math.max(10, Math.floor(Number(targetLuck) || 10));
       const costHint = Math.max(1, Math.floor(Number(localCost) || 1));
       if (!multiplayer.connected || !multiplayer.playerId) {
         state.info = "Join a server first to buy server luck.";
@@ -8338,6 +8440,7 @@
           targetLuck: target
         });
         multiplayer.serverLuck = Math.max(1, Number(data?.serverLuck || multiplayer.serverLuck || 1));
+        multiplayer.serverLuckUntil = Number(data?.serverLuckUntil || multiplayer.serverLuckUntil || 0);
         if (Number.isFinite(Number(data?.stardust))) {
           state.stardust = Math.max(0, Number(data.stardust));
         } else {
@@ -8408,6 +8511,7 @@
 
     function updateUI() {
       renderHudOnly();
+      renderStatusTimers();
       dockShopBtn.classList.toggle("active", !!state.shopOpen);
       dockRebirthBtn.classList.toggle("active", rebirthPanelEl.style.display !== "none");
       dockIndexBtn.classList.toggle("active", indexPanelEl.classList.contains("open"));
@@ -8838,6 +8942,7 @@
       updatePrompt();
       updateCamera();
       renderHudOnly();
+      renderStatusTimers();
       if (state.shopOpen) {
         shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Personal Luck: x${formatNumber(state.personalLuck || 1)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
       }
@@ -8959,6 +9064,7 @@
         if (msg?.type === "world" && Array.isArray(msg.occupiedSlots)) {
           multiplayer.occupiedSlots = msg.occupiedSlots;
           if (Number.isFinite(Number(msg.serverLuck))) multiplayer.serverLuck = Math.max(1, Number(msg.serverLuck));
+          multiplayer.serverLuckUntil = Number(msg.serverLuckUntil || 0);
           multiplayer.forcedBlueMoonUntil = Number(msg.forcedBlueMoonUntil || 0);
           multiplayer.forcedBlueMoonEventId = String(msg.forcedBlueMoonEventId || "");
           multiplayer.spawnDrops = Array.isArray(msg.spawnDrops) ? msg.spawnDrops : [];
@@ -9262,6 +9368,7 @@
         if (typeof joined.slot === "number") multiplayer.slot = joined.slot;
         if (joined.server?.name) multiplayer.serverName = String(joined.server.name);
         if (Number.isFinite(Number(joined.serverLuck))) multiplayer.serverLuck = Math.max(1, Number(joined.serverLuck));
+        multiplayer.serverLuckUntil = Number(joined.serverLuckUntil || 0);
         multiplayer.forcedBlueMoonUntil = Number(joined.forcedBlueMoonUntil || 0);
         multiplayer.forcedBlueMoonEventId = String(joined.forcedBlueMoonEventId || "");
         applyLockedBasesFromWorld(joined.lockedBases);
@@ -9449,6 +9556,7 @@
         multiplayer.serverId = "public-1";
         multiplayer.serverName = "Public #1";
         multiplayer.serverLuck = 1;
+        multiplayer.serverLuckUntil = 0;
         remoteDetailSignature = "";
         clearRemoteDetailMeshes();
         renderChat();

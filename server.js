@@ -33,6 +33,7 @@ const DAILY_STARDUST_LOOP = [
 ];
 const BASE_LOCK_BASE_SEC = 60;
 const BASE_LOCK_PER_REBIRTH_SEC = 10;
+const SERVER_LUCK_DURATION_SEC = 10 * 60;
 const STEAL_TIME_BY_RANK = Object.freeze({
   basic: 4,
   common: 6,
@@ -57,12 +58,15 @@ const FREEZE_RAY_DEF = Object.freeze({
   cooldownSec: 20
 });
 const SERVER_LUCK_STARDUST_COST_BY_TARGET = Object.freeze({
-  "100": 25,
-  "300": 90,
-  "1000": 220,
-  "3000": 700,
-  "10000": 2200,
-  "100000": 6000
+  "10": 100,
+  "25": 250,
+  "50": 500,
+  "100": 1000,
+  "300": 3000,
+  "1000": 10000,
+  "3000": 30000,
+  "10000": 100000,
+  "100000": 1000000
 });
 const PEDESTALS_PER_FLOOR = 10;
 const BASE_FLOOR_UNLOCK_REBIRTH = 10;
@@ -761,6 +765,8 @@ function getEquippedCombatAbilityFromPlayerDoc(playerDoc) {
 function serverTag(meta, viewerId = "") {
   const viewer = String(viewerId || "");
   const isOwner = viewer && String(meta.ownerId || "") === viewer;
+  const nowSec = Date.now() / 1000;
+  const luckUntil = Number(meta.serverLuckUntil || 0);
   return {
     id: meta.id,
     name: meta.name,
@@ -768,6 +774,8 @@ function serverTag(meta, viewerId = "") {
     ownerId: meta.ownerId || "",
     playerCount: meta.activeSlots.size,
     luck: Number(meta.serverLuck || 1),
+    serverLuckUntil: luckUntil,
+    serverLuckRemainingSec: luckUntil > nowSec ? Math.max(0, Math.ceil(luckUntil - nowSec)) : 0,
     whitelistCount: meta.whitelistPlayerIds instanceof Set ? meta.whitelistPlayerIds.size : 0,
     canConfigure: !!(meta.isPrivate && isOwner)
   };
@@ -793,6 +801,7 @@ function ensureServerState(serverId, opts = {}) {
     isPrivate: !!opts.isPrivate,
     createdAt: Date.now(),
     serverLuck: Math.max(1, Number(opts.serverLuck || 1)),
+    serverLuckUntil: Number(opts.serverLuckUntil || 0),
     forcedBlueMoonUntil: Number(opts.forcedBlueMoonUntil || 0),
     forcedBlueMoonEventId: String(opts.forcedBlueMoonEventId || ""),
     activeSlots: new Map(),
@@ -1279,6 +1288,24 @@ function pruneBaseLocks(serverState, nowSec = Date.now() / 1000) {
   return changed;
 }
 
+function normalizeServerLuckWindow(serverState, nowSec = Date.now() / 1000) {
+  if (!serverState) return false;
+  let changed = false;
+  const until = Number(serverState.serverLuckUntil || 0);
+  if (until > 0 && until <= nowSec) {
+    serverState.serverLuckUntil = 0;
+    if (Number(serverState.serverLuck || 1) !== 1) {
+      serverState.serverLuck = 1;
+    }
+    changed = true;
+  }
+  if (Number(serverState.serverLuck || 1) <= 1 && Number(serverState.serverLuckUntil || 0) > 0) {
+    serverState.serverLuckUntil = 0;
+    changed = true;
+  }
+  return changed;
+}
+
 function listActiveBaseLocks(serverState, nowSec = Date.now() / 1000) {
   const out = [];
   if (!serverState || !(serverState.baseLockUntilByPlayer instanceof Map)) return out;
@@ -1293,10 +1320,12 @@ function listActiveBaseLocks(serverState, nowSec = Date.now() / 1000) {
 }
 
 function worldPayload(serverState) {
+  normalizeServerLuckWindow(serverState);
   return {
     type: "world",
     serverId: serverState.id,
     serverLuck: Number(serverState.serverLuck || 1),
+    serverLuckUntil: Number(serverState.serverLuckUntil || 0),
     forcedBlueMoonUntil: Number(serverState.forcedBlueMoonUntil || 0),
     forcedBlueMoonEventId: String(serverState.forcedBlueMoonEventId || ""),
     spawnDrops: listSpawnDrops(serverState),
@@ -2347,6 +2376,7 @@ app.post("/api/join", async (req, res) => {
       profile: existing.profile || {},
       isAdmin: adminFromAuth || isAdminProfile(existing.profile || {}),
       serverLuck: Number(serverState.serverLuck || 1),
+      serverLuckUntil: Number(serverState.serverLuckUntil || 0),
       forcedBlueMoonUntil: Number(serverState.forcedBlueMoonUntil || 0),
       forcedBlueMoonEventId: String(serverState.forcedBlueMoonEventId || ""),
       baseLockUntil: Number(getBaseLockUntil(serverState, playerId) || 0),
@@ -3033,20 +3063,23 @@ app.post("/api/admin/luck", async (req, res) => {
       return;
     }
     const nextLuck = Math.max(1, Math.floor(amount));
+    const expiresAt = Date.now() / 1000 + SERVER_LUCK_DURATION_SEC;
     if (scope === "global") {
       let changed = 0;
       for (const state of serverStates.values()) {
         state.serverLuck = nextLuck;
+        state.serverLuckUntil = expiresAt;
         broadcastWorld(state);
         changed += 1;
       }
-      res.json({ ok: true, scope: "global", serverLuck: nextLuck, affectedServers: changed });
+      res.json({ ok: true, scope: "global", serverLuck: nextLuck, serverLuckUntil: expiresAt, affectedServers: changed });
       return;
     }
     const serverState = ensureServerState(serverId, {});
     serverState.serverLuck = nextLuck;
+    serverState.serverLuckUntil = expiresAt;
     broadcastWorld(serverState);
-    res.json({ ok: true, scope: "server", serverId, serverLuck: serverState.serverLuck, affectedServers: 1 });
+    res.json({ ok: true, scope: "server", serverId, serverLuck: serverState.serverLuck, serverLuckUntil: expiresAt, affectedServers: 1 });
   } catch (err) {
     console.error("/api/admin/luck failed", err);
     res.status(500).json({ error: "internal error" });
@@ -3060,13 +3093,14 @@ app.post("/api/server/luck/buy", async (req, res) => {
     const uid = decoded.uid;
     const playerId = String(req.body?.playerId || "").trim();
     const serverId = cleanServerId(req.body?.serverId || DEFAULT_SERVER_ID);
-    const targetLuck = Math.max(2, Math.floor(Number(req.body?.targetLuck || 2)));
+    const targetLuck = Math.max(10, Math.floor(Number(req.body?.targetLuck || 10)));
     if (!playerId || playerId !== uid) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
 
     const serverState = ensureServerState(serverId, {});
+    normalizeServerLuckWindow(serverState);
     const currentLuck = Math.max(1, Math.floor(Number(serverState.serverLuck || 1)));
     if (targetLuck <= currentLuck) {
       res.status(400).json({ error: "target must be higher than current server luck" });
@@ -3087,6 +3121,7 @@ app.post("/api/server/luck/buy", async (req, res) => {
 
     player.data.state.stardust = stardustNow - cost;
     serverState.serverLuck = targetLuck;
+    serverState.serverLuckUntil = Date.now() / 1000 + SERVER_LUCK_DURATION_SEC;
 
     await setPlayerDocMerge(uid, { data: player.data, updatedAt: Date.now() }, decoded);
     broadcastWorld(serverState);
@@ -3095,6 +3130,7 @@ app.post("/api/server/luck/buy", async (req, res) => {
       ok: true,
       serverId,
       serverLuck: serverState.serverLuck,
+      serverLuckUntil: serverState.serverLuckUntil,
       cost,
       stardust: player.data.state.stardust
     });
@@ -3617,6 +3653,14 @@ setInterval(() => {
     });
   }
 }, 200);
+
+setInterval(() => {
+  const nowSec = Date.now() / 1000;
+  for (const state of serverStates.values()) {
+    const changed = normalizeServerLuckWindow(state, nowSec) || pruneBaseLocks(state, nowSec);
+    if (changed) broadcastWorld(state);
+  }
+}, 1000);
 
 server.listen(PORT, () => {
   console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
