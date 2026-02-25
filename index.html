@@ -1772,7 +1772,7 @@
   </div>
   <div id="adminPanel" class="panel">
     <h3>Admin Console</h3>
-    <div style="font-size:12px;color:#c5d4ff;margin-bottom:6px">Commands: <b>luck &lt;amount&gt; server|global</b>, <b>event bluemoon [server|global] [seconds]</b>, <b>give &lt;username&gt; &lt;rarity|valentinesblock&gt; &lt;amount&gt; [mutation]</b>, <b>spawn &lt;creature&gt; server|global &lt;amount&gt;</b>, <b>reset &lt;username&gt;</b>, <b>tutorial reset &lt;username&gt;</b>, <b>broadcast &lt;message&gt;</b></div>
+    <div style="font-size:12px;color:#c5d4ff;margin-bottom:6px">Commands: <b>luck &lt;amount&gt; server|global</b>, <b>event bluemoon [server|global] [seconds]</b>, <b>give &lt;username&gt; &lt;rarity|valentinesblock&gt; &lt;amount&gt; [mutation]</b>, <b>give stardust &lt;username&gt; &lt;amount&gt;</b>, <b>spawn &lt;creature&gt; server|global &lt;amount&gt;</b>, <b>reset &lt;username&gt;</b>, <b>tutorial reset &lt;username&gt;</b>, <b>broadcast &lt;message&gt;</b></div>
     <input id="adminCmd" placeholder="luck 100" />
     <button id="adminRun">Execute</button>
     <div id="adminMsg"></div>
@@ -4388,6 +4388,27 @@
           return;
         }
         if (head === "give") {
+          if (String(parts[1] || "").toLowerCase() === "stardust") {
+            const username = String(parts[2] || "").trim();
+            const amount = Math.max(1, Math.floor(Number(parts[3] || 0)));
+            if (!username || !Number.isFinite(amount) || amount < 1) {
+              setAdminMessage("Usage: give stardust <username> <amount>");
+              return;
+            }
+            const data = await apiJson("/api/admin/give", "POST", {
+              serverId: multiplayer.serverId,
+              username,
+              resource: "stardust",
+              amount
+            }, token);
+            setAdminMessage(`Gave 💫 ${formatNumber(Number(data.amount || amount))} Stardust to ${username}.`, true);
+            state.info = `Admin command: gave 💫 ${formatNumber(Number(data.amount || amount))} Stardust to ${username}`;
+            if (String(data.targetPlayerId || "") === String(multiplayer.playerId || "")) {
+              state.stardust = Math.max(0, Number(data.stardust || state.stardust || 0));
+              updateUI();
+            }
+            return;
+          }
           const username = String(parts[1] || "").trim();
           const blockKey = String(parts[2] || "").trim().toLowerCase();
           const a3 = String(parts[3] || "").trim().toLowerCase();
@@ -9063,6 +9084,13 @@
           return;
         }
         if (msg?.type === "admin-give") {
+          if (String(msg.resource || "").toLowerCase() === "stardust") {
+            const amount = Math.max(0, Number(msg.amount || 0));
+            if (amount > 0) state.stardust = Math.max(0, Number(state.stardust || 0) + amount);
+            state.info = `Received 💫 ${formatNumber(amount)} Stardust from ${String(msg.from || "Admin")}.`;
+            updateUI();
+            return;
+          }
           const blockKey = normalizeBlockKey(String(msg.blockKey || msg.rankKey || "basic"));
           const amount = Math.max(0, Number(msg.amount || 0));
           const mutation = normalizeMutation(msg.mutation || (msg.blueMoon ? "bluemoon" : (msg.soulbound ? "soulbound" : "normal")));

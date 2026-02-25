@@ -3115,13 +3115,15 @@ app.post("/api/admin/give", async (req, res) => {
     const serverId = cleanServerId(req.body?.serverId || DEFAULT_SERVER_ID);
     const username = String(req.body?.username || "").trim();
     const blockKey = normalizeRankKey(req.body?.rankKey || req.body?.blockKey || "");
+    const resource = String(req.body?.resource || "").trim().toLowerCase();
     const amountRaw = Number(req.body?.amount);
     const amount = Number.isFinite(amountRaw) && amountRaw >= 1 ? Math.floor(amountRaw) : 1;
     const mutation = normalizeMutation(req.body?.mutation || "normal");
     const blueMoon = mutation === "bluemoon";
     const soulbound = mutation === "soulbound";
     const isSpecial = SPECIAL_BLOCK_KEYS.has(blockKey);
-    if (!username || (!RANK_KEYS.has(blockKey) && !isSpecial)) {
+    const isStardustGive = resource === "stardust" || blockKey === "stardust";
+    if (!username || (!isStardustGive && !RANK_KEYS.has(blockKey) && !isSpecial)) {
       res.status(400).json({ error: "invalid give payload" });
       return;
     }
@@ -3148,28 +3150,32 @@ app.post("/api/admin/give", async (req, res) => {
     }
 
     const target = ensurePlayerDataShape(await getPlayerDoc(targetPlayerId, decoded), serverState.activeSlots.get(targetPlayerId) ?? 0);
-    if (!target.data.state.luckyInventory || typeof target.data.state.luckyInventory !== "object") {
-      target.data.state.luckyInventory = {};
-    }
-    if (!target.data.state.luckyMoonInventory || typeof target.data.state.luckyMoonInventory !== "object") {
-      target.data.state.luckyMoonInventory = {};
-    }
-    if (!target.data.state.luckySoulboundInventory || typeof target.data.state.luckySoulboundInventory !== "object") {
-      target.data.state.luckySoulboundInventory = {};
-    }
-    if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") {
-      target.data.state.specialLuckyInventory = {};
-    }
     const add = Math.floor(amount);
-    if (isSpecial) {
-      const safeBlock = blockKey;
-      if (!target.data.state.specialLuckyInventory[safeBlock] || typeof target.data.state.specialLuckyInventory[safeBlock] !== "object") {
-        target.data.state.specialLuckyInventory[safeBlock] = { normal: 0, bluemoon: 0, soulbound: 0 };
-      }
-      target.data.state.specialLuckyInventory[safeBlock][mutation] = parsePositiveInt(target.data.state.specialLuckyInventory[safeBlock][mutation] || 0, 0) + add;
+    if (isStardustGive) {
+      target.data.state.stardust = parsePositiveInt(target.data.state.stardust || 0, 0) + add;
     } else {
-      const bucket = soulbound ? "luckySoulboundInventory" : (blueMoon ? "luckyMoonInventory" : "luckyInventory");
-      target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + add;
+      if (!target.data.state.luckyInventory || typeof target.data.state.luckyInventory !== "object") {
+        target.data.state.luckyInventory = {};
+      }
+      if (!target.data.state.luckyMoonInventory || typeof target.data.state.luckyMoonInventory !== "object") {
+        target.data.state.luckyMoonInventory = {};
+      }
+      if (!target.data.state.luckySoulboundInventory || typeof target.data.state.luckySoulboundInventory !== "object") {
+        target.data.state.luckySoulboundInventory = {};
+      }
+      if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") {
+        target.data.state.specialLuckyInventory = {};
+      }
+      if (isSpecial) {
+        const safeBlock = blockKey;
+        if (!target.data.state.specialLuckyInventory[safeBlock] || typeof target.data.state.specialLuckyInventory[safeBlock] !== "object") {
+          target.data.state.specialLuckyInventory[safeBlock] = { normal: 0, bluemoon: 0, soulbound: 0 };
+        }
+        target.data.state.specialLuckyInventory[safeBlock][mutation] = parsePositiveInt(target.data.state.specialLuckyInventory[safeBlock][mutation] || 0, 0) + add;
+      } else {
+        const bucket = soulbound ? "luckySoulboundInventory" : (blueMoon ? "luckyMoonInventory" : "luckyInventory");
+        target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + add;
+      }
     }
     const giveId = `g-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
@@ -3177,10 +3183,12 @@ app.post("/api/admin/give", async (req, res) => {
     notifyPlayer(serverState, targetPlayerId, {
       type: "admin-give",
       giveId,
+      resource: isStardustGive ? "stardust" : "luckyblock",
       rankKey: blockKey,
       blockKey,
       mutation,
       amount: add,
+      stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
       blueMoon,
       soulbound,
       from: caller.profile?.username || playerTag(uid)
@@ -3190,9 +3198,11 @@ app.post("/api/admin/give", async (req, res) => {
       ok: true,
       targetPlayerId,
       username,
+      resource: isStardustGive ? "stardust" : "luckyblock",
       rankKey: blockKey,
       blockKey,
       amount: add,
+      stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
       mutation,
       blueMoon,
       soulbound,
