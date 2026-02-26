@@ -1713,7 +1713,8 @@
   <div id="serverGate">
     <div class="serverCard">
       <div class="serverTitle">Choose Server</div>
-      <div class="serverSub">Join an existing server or create your own. Player count updates in real time while players are online.</div>
+      <div class="serverSub">Join an existing server or create your own. Player count updates in real time while players are online. Creating a server costs 💫 25 Stardust.</div>
+      <input id="serverSearch" placeholder="Search by server name, id, or owner" maxlength="40" style="width:100%;margin-bottom:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:9px 10px;outline:none" />
       <div id="serverRows"></div>
       <div class="serverCreate">
         <input id="serverName" placeholder="New server name" maxlength="28" />
@@ -1725,6 +1726,11 @@
       </div>
       <div id="serverConfigPanel">
         <div id="serverConfigTitle">Private Server Config</div>
+        <div id="serverSettingsRow" style="display:grid;gap:6px;margin-bottom:8px">
+          <label class="authCheckRow" style="margin:0"><input id="serverCfgAllowSteal" type="checkbox" checked /> Allow stealing</label>
+          <label class="authCheckRow" style="margin:0"><input id="serverCfgAllowPvp" type="checkbox" checked /> Allow PvP hits</label>
+          <div><button id="serverCfgSaveBtn" class="serverConfigBtn" style="width:100%">Save Settings</button></div>
+        </div>
         <div id="serverWhitelistRow">
           <input id="serverWhitelistInput" placeholder="Invite username" maxlength="24" />
           <button id="serverWhitelistAddBtn">Add</button>
@@ -1771,6 +1777,7 @@
   <div id="help" class="panel">
     <h2>Grow Lucky Blocks</h2>
     <p><b>Move:</b> WASD / Arrows</p>
+    <p><b>Jump:</b> Spacebar</p>
     <p><b>Look:</b> Mouse (click to lock)</p>
     <p><b>Interact:</b> E</p>
     <p><b>Sell Creature:</b> Walk up to a creature and press E</p>
@@ -2035,11 +2042,10 @@
       { luck: 50, stardust: 500, tag: "" },
       { luck: 100, stardust: 1000, tag: "POPULAR" },
       { luck: 300, stardust: 3000, tag: "" },
-      { luck: 1000, stardust: 10000, tag: "BEST VALUE" },
-      { luck: 3000, stardust: 30000, tag: "" }
+      { luck: 1000, stardust: 10000, tag: "BEST VALUE" }
     ];
     const MAX_REBIRTHS = 10;
-    const PERSONAL_LUCK_MAX = 9999;
+    const PERSONAL_LUCK_MAX = 1000;
     const PERSONAL_LUCK_MIN_UNLOCK_TARGET = 10;
     const PERSONAL_LUCK_STARDUST_RATE = 10;
     const ENABLE_LEGACY_RANK_MIGRATION = false;
@@ -2127,6 +2133,7 @@
     const authGateEl = document.getElementById("authGate");
     const serverGateEl = document.getElementById("serverGate");
     const serverRowsEl = document.getElementById("serverRows");
+    const serverSearchEl = document.getElementById("serverSearch");
     const serverNameEl = document.getElementById("serverName");
     const serverPrivateEl = document.getElementById("serverPrivate");
     const serverRefreshBtn = document.getElementById("serverRefreshBtn");
@@ -2138,6 +2145,9 @@
     const serverWhitelistAddBtnEl = document.getElementById("serverWhitelistAddBtn");
     const serverWhitelistListEl = document.getElementById("serverWhitelistList");
     const serverConfigMsgEl = document.getElementById("serverConfigMsg");
+    const serverCfgAllowStealEl = document.getElementById("serverCfgAllowSteal");
+    const serverCfgAllowPvpEl = document.getElementById("serverCfgAllowPvp");
+    const serverCfgSaveBtnEl = document.getElementById("serverCfgSaveBtn");
     const authTabSignupEl = document.getElementById("authTabSignup");
     const authTabLoginEl = document.getElementById("authTabLogin");
     const authUsernameEl = document.getElementById("authUsername");
@@ -2249,6 +2259,10 @@
       serverName: "Public #1",
       serverLuck: 1,
       serverLuckUntil: 0,
+      maxPlayers: 8,
+      allowStealing: true,
+      allowPvp: true,
+      serverSearchQuery: "",
       forcedBlueMoonUntil: 0,
       forcedBlueMoonEventId: "",
       slot: 0,
@@ -2537,8 +2551,10 @@
       pos: new THREE.Vector3(0, 1.65, 11),
       yaw: 0,
       pitch: -0.15,
-      speed: 7,
+      speed: 8.2,
       radius: 0.45,
+      velY: 0,
+      onGround: true,
       pointerLocked: false
     };
 
@@ -4273,9 +4289,38 @@
       try {
         const data = await apiJsonAuth(`/api/servers/config?serverId=${encodeURIComponent(serverConfigServerId)}&playerId=${encodeURIComponent(multiplayer.playerId)}`);
         renderServerWhitelist(data?.whitelist || []);
+        const settings = data?.settings && typeof data.settings === "object" ? data.settings : {};
+        serverCfgAllowStealEl.checked = settings.allowStealing !== false;
+        serverCfgAllowPvpEl.checked = settings.allowPvp !== false;
         setServerConfigMessage("Invite usernames to whitelist this private server.", true);
       } catch (err) {
         setServerConfigMessage(String(err?.payload?.error || err?.message || "Could not load server config."));
+      }
+    }
+
+    async function saveServerConfigSettingsFromUi() {
+      if (!serverConfigServerId || serverConfigBusy) return;
+      serverConfigBusy = true;
+      serverCfgSaveBtnEl.disabled = true;
+      setServerConfigMessage("Saving settings...", true);
+      try {
+        const data = await apiJsonAuth("/api/servers/config/settings", "POST", {
+          playerId: multiplayer.playerId,
+          serverId: serverConfigServerId,
+          allowStealing: !!serverCfgAllowStealEl.checked,
+          allowPvp: !!serverCfgAllowPvpEl.checked
+        });
+        if (data?.server && String(data.server.id || "") === String(multiplayer.serverId || "")) {
+          multiplayer.allowStealing = data.server.allowStealing !== false;
+          multiplayer.allowPvp = data.server.allowPvp !== false;
+        }
+        if (Array.isArray(data?.servers)) renderServerRows(data.servers);
+        setServerConfigMessage("Settings saved.", true);
+      } catch (err) {
+        setServerConfigMessage(String(err?.payload?.error || err?.message || "Could not save settings."));
+      } finally {
+        serverConfigBusy = false;
+        serverCfgSaveBtnEl.disabled = false;
       }
     }
 
@@ -4333,11 +4378,13 @@
       const rows = (Array.isArray(servers) ? servers : []).map((s) => {
         const tag = s.isPrivate ? "Private" : "Public";
         const owner = s.ownerId === multiplayer.playerId ? " (You)" : "";
+        const ownerName = String(s.ownerUsername || "Unknown");
+        const maxPlayers = Math.max(1, Number(s.maxPlayers || multiplayer.maxPlayers || 8));
         return `
           <div class="serverRow">
             <div>
               <div style="font-weight:800">${String(s.name || "Server")}${owner}</div>
-              <div class="serverMeta">${tag} | Players: ${Number(s.playerCount || 0)} | Luck: x${Number(s.luck || 1)}${s.isPrivate ? ` | Whitelist: ${Number(s.whitelistCount || 0)}` : ""}</div>
+              <div class="serverMeta">${tag} | Players: ${Number(s.playerCount || 0)}/${maxPlayers} | Owner: ${ownerName} | Luck: x${Number(s.luck || 1)}${s.isPrivate ? ` | Whitelist: ${Number(s.whitelistCount || 0)}` : ""}</div>
               <div style="font-size:12px;color:#cbe2f4">${String(s.id || "")}</div>
             </div>
             <div class="serverActions">
@@ -4353,7 +4400,11 @@
     async function loadServers() {
       if (!multiplayer.playerId) return [];
       try {
-        const data = await apiJsonAuth(`/api/servers?playerId=${encodeURIComponent(multiplayer.playerId)}`);
+        const q = String(multiplayer.serverSearchQuery || "").trim();
+        const qs = q
+          ? `playerId=${encodeURIComponent(multiplayer.playerId)}&q=${encodeURIComponent(q)}`
+          : `playerId=${encodeURIComponent(multiplayer.playerId)}`;
+        const data = await apiJsonAuth(`/api/servers?${qs}`);
         const servers = Array.isArray(data.servers) ? data.servers : [];
         renderServerRows(servers);
         return servers;
@@ -4367,19 +4418,21 @@
       const name = String(serverNameEl.value || "").trim() || "Garden Server";
       const isPrivate = !!serverPrivateEl.checked;
       serverCreateBtn.disabled = true;
-      setServerMessage("Creating server...", true);
+      setServerMessage("Creating server (cost: 💫 25)...", true);
       try {
         const data = await apiJsonAuth("/api/servers/create", "POST", {
           playerId: multiplayer.playerId,
           name,
           isPrivate
         }, true);
+        if (Number.isFinite(Number(data?.stardust))) state.stardust = Math.max(0, Number(data.stardust));
         renderServerRows(data.servers || []);
-        setServerMessage("Server created.", true);
+        setServerMessage("Server created (-💫 25).", true);
         serverNameEl.value = "";
         if (!isPrivate) closeServerConfigPanel();
       } catch (err) {
-        setServerMessage(err?.message || "Failed to create server.");
+        const detail = String(err?.payload?.error || err?.message || "Failed to create server.");
+        setServerMessage(detail);
       } finally {
         serverCreateBtn.disabled = false;
       }
@@ -5902,6 +5955,11 @@
 
     async function startStealAt(target) {
       if (!target || stealStartBusy || !multiplayer.connected) return false;
+      if (!multiplayer.allowStealing) {
+        state.info = "Stealing is disabled on this server.";
+        updateUI();
+        return false;
+      }
       if (Number(target.lockedRemainingSec || 0) > 0) {
         state.info = `That base is locked for ${formatNumber(Number(target.lockedRemainingSec || 0))}s.`;
         updateUI();
@@ -6040,6 +6098,11 @@
 
     async function tryBatHit() {
       if (batHitBusy || !multiplayer.connected) return false;
+      if (!multiplayer.allowPvp) {
+        state.info = "PvP is disabled on this server.";
+        updateUI();
+        return false;
+      }
       ensureBatState();
       if (state.carriedSteal && String(state.carriedSteal.itemType || "block") === "creature") {
         state.info = "You cannot use PvP gear while carrying a stolen creature.";
@@ -7392,7 +7455,7 @@
         }
         return;
       }
-      const stealTarget = getClosestStealTarget();
+      const stealTarget = multiplayer.allowStealing ? getClosestStealTarget() : null;
       if (stealTarget) {
         if (Number(stealTarget.lockedRemainingSec || 0) > 0) {
           setPrompt(`Target base locked (${formatNumber(Number(stealTarget.lockedRemainingSec || 0))}s)`);
@@ -7407,7 +7470,7 @@
         }
         return;
       }
-      const hitTarget = getClosestBatTarget();
+      const hitTarget = multiplayer.allowPvp ? getClosestBatTarget() : null;
       if (hitTarget) {
         const abilityLabel = currentCombatLabel();
         const cooldownBase = isFreezeRayEquipped() ? Number(FREEZE_RAY_DEF.cooldownSec || 20) : Number(getBatDef(state.equippedBat).cooldownSec || 1.5);
@@ -7464,6 +7527,9 @@
     function movePlayer(dt) {
       if (gameplayUiOpen()) return;
       if (Number(state.stunUntil || 0) > realNowSec()) return;
+      const groundY = 1.65;
+      const gravity = 22;
+      const jumpVelocity = 8.5;
 
       const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
       const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
@@ -7480,14 +7546,29 @@
         m.addScaledVector(fwd, mobileInput.moveY);
       }
 
+      const stealingNow = !!(state.activeSteal && getStealRemainingSeconds(state.activeSteal) > 0.01);
+      const moveSpeed = player.speed * (stealingNow ? 0.58 : 1);
       if (m.lengthSq() > 0) {
-        m.normalize().multiplyScalar(player.speed * dt);
+        m.normalize().multiplyScalar(moveSpeed * dt);
         player.pos.add(m);
       }
 
       const ownSlotCenterX = slotOffsetX(multiplayer.slot || 0);
       player.pos.x = Math.max(ownSlotCenterX - 160, Math.min(ownSlotCenterX + 160, player.pos.x));
       player.pos.z = Math.max(-60, Math.min(60, player.pos.z));
+
+      if (keys.has("Space") && player.onGround) {
+        player.velY = jumpVelocity;
+        player.onGround = false;
+      }
+      player.velY -= gravity * dt;
+      player.pos.y += player.velY * dt;
+      if (player.pos.y <= groundY) {
+        player.pos.y = groundY;
+        player.velY = 0;
+        player.onGround = true;
+      }
+
       collide();
     }
 
@@ -9362,6 +9443,11 @@
         });
         if (typeof joined.slot === "number") multiplayer.slot = joined.slot;
         if (joined.server?.name) multiplayer.serverName = String(joined.server.name);
+        if (joined.server && typeof joined.server === "object") {
+          multiplayer.maxPlayers = Math.max(1, Number(joined.server.maxPlayers || multiplayer.maxPlayers || 8));
+          multiplayer.allowStealing = joined.server.allowStealing !== false;
+          multiplayer.allowPvp = joined.server.allowPvp !== false;
+        }
         if (Number.isFinite(Number(joined.serverLuck))) multiplayer.serverLuck = Math.max(1, Number(joined.serverLuck));
         multiplayer.serverLuckUntil = Number(joined.serverLuckUntil || 0);
         multiplayer.forcedBlueMoonUntil = Number(joined.forcedBlueMoonUntil || 0);
@@ -9443,7 +9529,15 @@
         await loadRecentChat();
         renderRemoteFields();
         connectWorldSocket();
-      } catch {
+      } catch (err) {
+        const msg = String(err?.payload?.error || err?.message || "").toLowerCase();
+        if (msg.includes("server full")) {
+          gameStarted = false;
+          serverGateEl.classList.add("show");
+          authGateEl.classList.remove("show");
+          setServerMessage("That server is full (8/8). Try another server.");
+          return;
+        }
         state.info = "Server unavailable. Running local-only mode.";
         init();
         try {
@@ -9476,7 +9570,12 @@
         setServerMessage("");
         serverRefreshBtn.disabled = false;
       });
+      serverSearchEl.addEventListener("input", () => {
+        multiplayer.serverSearchQuery = String(serverSearchEl.value || "").trim();
+        void loadServers();
+      });
       serverCreateBtn.addEventListener("click", createServerFromMenu);
+      serverCfgSaveBtnEl.addEventListener("click", () => { void saveServerConfigSettingsFromUi(); });
       serverRowsEl.addEventListener("click", (e) => {
         const target = e.target;
         if (!(target instanceof HTMLElement)) return;
@@ -9534,6 +9633,8 @@
         }
         multiplayer.profile.email = multiplayer.profile.email || String(user.email || "");
         desiredUsername = "";
+        multiplayer.serverSearchQuery = "";
+        serverSearchEl.value = "";
         closeServerConfigPanel();
         authGateEl.classList.remove("show");
         serverGateEl.classList.add("show");
@@ -9550,6 +9651,8 @@
         multiplayer.connected = false;
         multiplayer.serverId = "public-1";
         multiplayer.serverName = "Public #1";
+        multiplayer.serverSearchQuery = "";
+        serverSearchEl.value = "";
         multiplayer.serverLuck = 1;
         multiplayer.serverLuckUntil = 0;
         remoteDetailSignature = "";

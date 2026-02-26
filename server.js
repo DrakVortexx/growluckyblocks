@@ -8,6 +8,7 @@ const PORT = Number(process.env.PORT || 3000);
 const PLAYERS_COLLECTION_ID = process.env.FIREBASE_PLAYERS_COLLECTION_ID || "players";
 const TRADES_COLLECTION_ID = process.env.FIREBASE_TRADES_COLLECTION_ID || "trades";
 const CHAT_COLLECTION_ID = process.env.FIREBASE_CHAT_COLLECTION_ID || "chat";
+const SERVERS_COLLECTION_ID = process.env.FIREBASE_SERVERS_COLLECTION_ID || "servers";
 const PLAYERS_BLOB_FIELD = process.env.FIREBASE_PLAYERS_BLOB_FIELD || "profile";
 const Query = {
   equal: (field, value) => ({ op: "equal", field, value }),
@@ -71,8 +72,9 @@ const BASE_FLOOR_UNLOCK_REBIRTH = 10;
 const REBIRTHS_PER_EXTRA_FLOOR = 10;
 const MAX_BASE_FLOORS = 6;
 const MAX_REBIRTHS = 10;
-const PERSONAL_LUCK_MAX = 9999;
-const MAX_SERVER_SLOTS = 120;
+const PERSONAL_LUCK_MAX = 1000;
+const MAX_SERVER_SLOTS = 8;
+const PRIVATE_SERVER_CREATE_STARDUST_COST = 25;
 const SPAWN_DROP_CENTER = Object.freeze({ x: -10.5, z: 6.1 });
 const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Fat Cat", rankKey: "basic", rate: 2.30 },
@@ -770,11 +772,15 @@ function serverTag(meta, viewerId = "") {
     name: meta.name,
     isPrivate: !!meta.isPrivate,
     ownerId: meta.ownerId || "",
+    ownerUsername: String(meta.ownerUsername || ""),
     playerCount: meta.activeSlots.size,
+    maxPlayers: MAX_SERVER_SLOTS,
     luck: Number(meta.serverLuck || 1),
     serverLuckUntil: luckUntil,
     serverLuckRemainingSec: luckUntil > nowSec ? Math.max(0, Math.ceil(luckUntil - nowSec)) : 0,
     whitelistCount: meta.whitelistPlayerIds instanceof Set ? meta.whitelistPlayerIds.size : 0,
+    allowStealing: meta.allowStealing !== false,
+    allowPvp: meta.allowPvp !== false,
     canConfigure: !!(meta.isPrivate && isOwner)
   };
 }
@@ -797,6 +803,7 @@ function ensureServerState(serverId, opts = {}) {
     name: cleanServerName(opts.name || (id === DEFAULT_SERVER_ID ? "Public #1" : "Garden Server")),
     ownerId: String(opts.ownerId || ""),
     isPrivate: !!opts.isPrivate,
+    ownerUsername: String(opts.ownerUsername || ""),
     createdAt: Date.now(),
     serverLuck: Math.max(1, Number(opts.serverLuck || 1)),
     serverLuckUntil: Number(opts.serverLuckUntil || 0),
@@ -814,6 +821,9 @@ function ensureServerState(serverId, opts = {}) {
     batCooldownUntilByPlayer: new Map(),
     whitelistPlayerIds: new Set(),
     whitelistUsernames: new Set(),
+    allowStealing: opts.allowStealing !== false,
+    allowPvp: opts.allowPvp !== false,
+    chatMessages: [],
     recentlyStolenByPlayer: new Map(),
     baseLockUntilByPlayer: new Map(),
     stealTickBusy: false
@@ -822,7 +832,7 @@ function ensureServerState(serverId, opts = {}) {
   return state;
 }
 
-ensureServerState(DEFAULT_SERVER_ID, { name: "Public #1", isPrivate: false });
+ensureServerState(DEFAULT_SERVER_ID, { name: "Public #1", isPrivate: false, ownerUsername: "System" });
 
 function canAccessServer(state, playerId) {
   if (!state) return false;
@@ -832,10 +842,11 @@ function canAccessServer(state, playerId) {
 }
 
 function listServersForPlayer(playerId) {
+  const viewer = String(playerId || "");
   const out = [];
   for (const state of serverStates.values()) {
     if (!canAccessServer(state, playerId)) continue;
-    out.push(serverTag(state, playerId));
+    out.push(serverTag(state, viewer));
   }
   out.sort((a, b) => {
     if (a.id === DEFAULT_SERVER_ID) return -1;
@@ -843,6 +854,17 @@ function listServersForPlayer(playerId) {
     return Number(b.playerCount || 0) - Number(a.playerCount || 0);
   });
   return out;
+}
+
+function filterServersByQuery(servers, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return servers;
+  return servers.filter((s) => {
+    const name = String(s?.name || "").toLowerCase();
+    const id = String(s?.id || "").toLowerCase();
+    const owner = String(s?.ownerUsername || "").toLowerCase();
+    return name.includes(q) || id.includes(q) || owner.includes(q);
+  });
 }
 
 function deepClone(value) {
@@ -1040,7 +1062,15 @@ async function getPlayerDoc(playerId, actor = null) {
 
 async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
   const strict = !!(opts && opts.strict);
-  const merged = mergePatch(playerCache.get(playerId) || {}, patch);
+  const prev = playerCache.get(playerId) || {};
+  const merged = mergePatch(prev, patch);
+  try {
+    if (JSON.stringify(prev) === JSON.stringify(merged)) {
+      return merged;
+    }
+  } catch {
+    // fallback to write path when serialization check fails
+  }
   playerCache.set(playerId, merged);
   try {
     try {
@@ -1081,6 +1111,72 @@ async function deletePlayerDoc(playerId, actor = null) {
   } catch (err) {
     if (isDatastoreNotFound(err)) return;
     console.error("deletePlayerDoc degraded delete", err?.message || err);
+  }
+}
+
+function serverStateToDoc(state) {
+  if (!state) return null;
+  return {
+    id: String(state.id || ""),
+    name: cleanServerName(state.name || "Garden Server"),
+    ownerId: String(state.ownerId || ""),
+    ownerUsername: cleanUsername(state.ownerUsername || ""),
+    isPrivate: !!state.isPrivate,
+    allowStealing: state.allowStealing !== false,
+    allowPvp: state.allowPvp !== false,
+    whitelistPlayerIds: [...(state.whitelistPlayerIds instanceof Set ? state.whitelistPlayerIds : [])].map((v) => String(v || "")).filter(Boolean).slice(0, 256),
+    whitelistUsernames: [...(state.whitelistUsernames instanceof Set ? state.whitelistUsernames : [])].map((v) => cleanUsername(v)).filter(Boolean).slice(0, 256),
+    createdAt: Number(state.createdAt || Date.now()),
+    updatedAt: Date.now()
+  };
+}
+
+async function saveServerStateDoc(state) {
+  if (!state || String(state.id || "") === DEFAULT_SERVER_ID) return;
+  const doc = serverStateToDoc(state);
+  if (!doc || !doc.id) return;
+  try {
+    try {
+      await updateDocument(SERVERS_COLLECTION_ID, doc.id, doc, null);
+    } catch (err) {
+      if (isDatastoreNotFound(err)) {
+        await createDocument(SERVERS_COLLECTION_ID, doc.id, doc, null);
+      } else {
+        throw err;
+      }
+    }
+  } catch (err) {
+    console.error("saveServerStateDoc degraded write", err?.message || err);
+  }
+}
+
+async function loadPersistedServers() {
+  try {
+    const snap = await listDocuments(SERVERS_COLLECTION_ID, [Query.limit(400)], null);
+    for (const rawDoc of (snap.documents || [])) {
+      const doc = sanitizeDocData(rawDoc || {});
+      const id = cleanServerId(doc.id || rawDoc?.$id || "");
+      if (!id || id === DEFAULT_SERVER_ID) continue;
+      const state = ensureServerState(id, {
+        name: cleanServerName(doc.name || "Garden Server"),
+        ownerId: String(doc.ownerId || ""),
+        ownerUsername: cleanUsername(doc.ownerUsername || ""),
+        isPrivate: !!doc.isPrivate,
+        allowStealing: doc.allowStealing !== false,
+        allowPvp: doc.allowPvp !== false
+      });
+      state.createdAt = Number(doc.createdAt || state.createdAt || Date.now());
+      state.allowStealing = doc.allowStealing !== false;
+      state.allowPvp = doc.allowPvp !== false;
+      if (Array.isArray(doc.whitelistPlayerIds)) {
+        state.whitelistPlayerIds = new Set(doc.whitelistPlayerIds.map((v) => String(v || "")).filter(Boolean));
+      }
+      if (Array.isArray(doc.whitelistUsernames)) {
+        state.whitelistUsernames = new Set(doc.whitelistUsernames.map((v) => cleanUsername(v)).filter(Boolean));
+      }
+    }
+  } catch (err) {
+    console.error("loadPersistedServers degraded read", err?.message || err);
   }
 }
 
@@ -1169,7 +1265,7 @@ function firstFreeSlot(serverState) {
   for (let slot = 0; slot < MAX_SERVER_SLOTS; slot += 1) {
     if (!used.has(slot)) return slot;
   }
-  return MAX_SERVER_SLOTS - 1;
+  return null;
 }
 
 async function claimSlot(serverState, playerId, savedSlot) {
@@ -1185,6 +1281,7 @@ async function claimSlot(serverState, playerId, savedSlot) {
     return saved;
   }
   const slot = firstFreeSlot(serverState);
+  if (!Number.isInteger(slot)) return null;
   serverState.activeSlots.set(playerId, slot);
   return slot;
 }
@@ -2144,6 +2241,13 @@ app.post("/api/auth/profile", async (req, res) => {
         state.activeProfiles.set(uid, profile);
         broadcastWorld(state);
       }
+      if (String(state.ownerId || "") === uid) {
+        const nextOwnerUsername = cleanUsername(profile.username || "");
+        if (nextOwnerUsername && nextOwnerUsername !== String(state.ownerUsername || "")) {
+          state.ownerUsername = nextOwnerUsername;
+          void saveServerStateDoc(state);
+        }
+      }
     }
 
     res.json({ ok: true, profile, isAdmin: isAdminProfile(profile) });
@@ -2161,7 +2265,9 @@ app.get("/api/servers", async (req, res) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-  res.json({ servers: listServersForPlayer(playerId) });
+  const q = String(req.query?.q || "").trim();
+  const servers = filterServersByQuery(listServersForPlayer(playerId), q);
+  res.json({ servers });
 });
 
 app.post("/api/servers/create", async (req, res) => {
@@ -2179,9 +2285,36 @@ app.post("/api/servers/create", async (req, res) => {
     }
     const name = cleanServerName(req.body?.name || "Garden Server");
     const isPrivate = !!req.body?.isPrivate;
+    const profile = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), 0);
+    if (!profile?.data?.state || typeof profile.data.state !== "object") profile.data = { state: {} };
+    const stardustNow = Number(profile?.data?.state?.stardust || 0);
+    if (!Number.isFinite(stardustNow) || stardustNow < PRIVATE_SERVER_CREATE_STARDUST_COST) {
+      res.status(400).json({
+        error: "not enough stardust",
+        required: PRIVATE_SERVER_CREATE_STARDUST_COST,
+        stardust: Math.max(0, stardustNow || 0)
+      });
+      return;
+    }
+    profile.data.state.stardust = stardustNow - PRIVATE_SERVER_CREATE_STARDUST_COST;
+    await setPlayerDocMerge(playerId, { data: profile.data, updatedAt: Date.now() }, decoded);
     const id = `srv-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
-    const state = ensureServerState(id, { name, ownerId: playerId, isPrivate });
-    res.json({ ok: true, server: serverTag(state, playerId), servers: listServersForPlayer(playerId) });
+    const state = ensureServerState(id, {
+      name,
+      ownerId: playerId,
+      ownerUsername: cleanUsername(profile?.profile?.username || ""),
+      isPrivate,
+      allowStealing: true,
+      allowPvp: true
+    });
+    await saveServerStateDoc(state);
+    res.json({
+      ok: true,
+      server: serverTag(state, playerId),
+      servers: listServersForPlayer(playerId),
+      stardust: Number(profile.data.state.stardust || 0),
+      createCost: PRIVATE_SERVER_CREATE_STARDUST_COST
+    });
   } catch (err) {
     console.error("/api/servers/create failed", err);
     res.status(500).json({ error: "internal error" });
@@ -2206,7 +2339,11 @@ app.get("/api/servers/config", async (req, res) => {
     res.json({
       ok: true,
       server: serverTag(state, uid),
-      whitelist: listWhitelistUsernames(state)
+      whitelist: listWhitelistUsernames(state),
+      settings: {
+        allowStealing: state.allowStealing !== false,
+        allowPvp: state.allowPvp !== false
+      }
     });
   } catch (err) {
     console.error("/api/servers/config failed", err);
@@ -2247,6 +2384,7 @@ app.post("/api/servers/config/add", async (req, res) => {
     const targetDoc = ensurePlayerDataShape(await getPlayerDoc(targetPlayerId, decoded), 0);
     const canonical = cleanUsername(targetDoc?.profile?.username || username);
     addWhitelistUsername(state, canonical);
+    await saveServerStateDoc(state);
     res.json({
       ok: true,
       server: serverTag(state, uid),
@@ -2282,6 +2420,7 @@ app.post("/api/servers/config/remove", async (req, res) => {
     const targetPlayerId = await findPlayerIdByUsername(username);
     if (targetPlayerId) state.whitelistPlayerIds.delete(String(targetPlayerId));
     removeWhitelistUsername(state, username);
+    await saveServerStateDoc(state);
     res.json({
       ok: true,
       server: serverTag(state, uid),
@@ -2290,6 +2429,36 @@ app.post("/api/servers/config/remove", async (req, res) => {
     });
   } catch (err) {
     console.error("/api/servers/config/remove failed", err);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+app.post("/api/servers/config/settings", async (req, res) => {
+  try {
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    const uid = String(decoded.uid || "").trim();
+    const serverId = cleanServerId(req.body?.serverId || DEFAULT_SERVER_ID);
+    const state = ensureServerState(serverId, {});
+    if (!state.isPrivate) {
+      res.status(400).json({ error: "server is not private" });
+      return;
+    }
+    if (String(state.ownerId || "") !== uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    state.allowStealing = req.body?.allowStealing === false ? false : true;
+    state.allowPvp = req.body?.allowPvp === false ? false : true;
+    await saveServerStateDoc(state);
+    res.json({
+      ok: true,
+      server: serverTag(state, uid),
+      settings: { allowStealing: state.allowStealing, allowPvp: state.allowPvp },
+      servers: listServersForPlayer(uid)
+    });
+  } catch (err) {
+    console.error("/api/servers/config/settings failed", err);
     res.status(500).json({ error: "internal error" });
   }
 });
@@ -2339,6 +2508,10 @@ app.post("/api/join", async (req, res) => {
     }
     const savedSlot = Number(existing?.slots?.[serverId]);
     const slot = await claimSlot(serverState, playerId, savedSlot);
+    if (!Number.isInteger(slot)) {
+      res.status(400).json({ error: "server full", maxPlayers: MAX_SERVER_SLOTS });
+      return;
+    }
     serverState.activeProfiles.set(playerId, existing.profile || {});
     serverState.activeSnapshots.set(playerId, buildWorldSnapshot(existing.data || {}));
 
@@ -2420,6 +2593,13 @@ app.post("/api/save", async (req, res) => {
     const pos = serverState.activePositions.get(playerId) || { x: slot * 26, z: 11, yaw: 0 };
 
     const guardedData = applyRecentStealSaveGuards(serverState, playerId, data);
+    if (guardedData?.state && typeof guardedData.state === "object") {
+      delete guardedData.state.info;
+      delete guardedData.state.inventoryQuery;
+      delete guardedData.state.inventoryFocus;
+      delete guardedData.state.inventoryTab;
+      delete guardedData.state.indexTab;
+    }
     const safeData = ensurePlayerDataShape({ data: guardedData }, slot).data;
     await setPlayerDocMerge(playerId, {
       slot,
@@ -2573,6 +2753,10 @@ app.post("/api/steal/start", async (req, res) => {
       return;
     }
     const serverState = ensureServerState(serverId, {});
+    if (serverState.allowStealing === false) {
+      res.status(400).json({ error: "stealing disabled on this server" });
+      return;
+    }
     if (!serverState.activeSlots.has(playerId) || !serverState.activeSlots.has(ownerId)) {
       res.status(400).json({ error: "players must be online in this server" });
       return;
@@ -2898,6 +3082,10 @@ app.post("/api/pvp/hit", async (req, res) => {
     }
 
     const serverState = ensureServerState(serverId, {});
+    if (serverState.allowPvp === false) {
+      res.status(400).json({ error: "pvp disabled on this server" });
+      return;
+    }
     if (!serverState.activeSlots.has(playerId) || !serverState.activeSlots.has(targetPlayerId)) {
       res.status(400).json({ error: "target not online in this server" });
       return;
@@ -3026,12 +3214,10 @@ app.get("/api/chat/recent", async (req, res) => {
     const decoded = await verifyAuth(req, res);
     if (!decoded) return;
     const serverId = cleanServerId(req.query?.serverId || DEFAULT_SERVER_ID);
-    const snap = await listDocuments(CHAT_COLLECTION_ID, [Query.limit(240)], decoded);
-    const messages = (snap.documents || [])
-      .map((d) => sanitizeDocData(d))
-      .filter((m) => String(m.serverId || DEFAULT_SERVER_ID) === serverId)
-      .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-      .slice(-60);
+    const serverState = ensureServerState(serverId, {});
+    const messages = Array.isArray(serverState.chatMessages)
+      ? serverState.chatMessages.slice(-60)
+      : [];
     res.json({ messages });
   } catch (err) {
     console.error("/api/chat/recent failed", err);
@@ -3616,7 +3802,11 @@ wss.on("connection", (ws, req) => {
         text,
         createdAt: Date.now()
       };
-      createDocument(CHAT_COLLECTION_ID, ID.unique(), payload).catch(() => {});
+      if (!Array.isArray(serverState.chatMessages)) serverState.chatMessages = [];
+      serverState.chatMessages.push(payload);
+      if (serverState.chatMessages.length > 120) {
+        serverState.chatMessages = serverState.chatMessages.slice(-120);
+      }
       const out = JSON.stringify(payload);
       for (const client of serverState.socketsByPlayer.values()) {
         if (client.readyState === WebSocket.OPEN) client.send(out);
@@ -3660,8 +3850,10 @@ setInterval(() => {
   }
 }, 1000);
 
-server.listen(PORT, () => {
-  console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
-  console.log(`[Firebase] project=${firebaseProjectId || "unset"} configured=${hasFirebaseConfig ? "yes" : "no"}`);
-  console.log(`[Firebase] collections(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID})`);
+loadPersistedServers().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
+    console.log(`[Firebase] project=${firebaseProjectId || "unset"} configured=${hasFirebaseConfig ? "yes" : "no"}`);
+    console.log(`[Firebase] collections(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID}, servers=${SERVERS_COLLECTION_ID})`);
+  });
 });
