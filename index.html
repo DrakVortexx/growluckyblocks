@@ -2027,9 +2027,7 @@
       { luck: 100, stardust: 1000, tag: "POPULAR" },
       { luck: 300, stardust: 3000, tag: "" },
       { luck: 1000, stardust: 10000, tag: "BEST VALUE" },
-      { luck: 3000, stardust: 30000, tag: "" },
-      { luck: 10000, stardust: 100000, tag: "" },
-      { luck: 100000, stardust: 1000000, tag: "" }
+      { luck: 3000, stardust: 30000, tag: "" }
     ];
     const PERSONAL_LUCK_STARDUST_PACKS = [
       { luck: 10, stardust: 100, tag: "" },
@@ -2038,12 +2036,10 @@
       { luck: 100, stardust: 1000, tag: "POPULAR" },
       { luck: 300, stardust: 3000, tag: "" },
       { luck: 1000, stardust: 10000, tag: "BEST VALUE" },
-      { luck: 3000, stardust: 30000, tag: "" },
-      { luck: 10000, stardust: 100000, tag: "" },
-      { luck: 100000, stardust: 1000000, tag: "" }
+      { luck: 3000, stardust: 30000, tag: "" }
     ];
     const MAX_REBIRTHS = 10;
-    const PERSONAL_LUCK_MAX = 100000;
+    const PERSONAL_LUCK_MAX = 9999;
     const PERSONAL_LUCK_MIN_UNLOCK_TARGET = 10;
     const PERSONAL_LUCK_STARDUST_RATE = 10;
     const ENABLE_LEGACY_RANK_MIGRATION = false;
@@ -4099,8 +4095,7 @@
       const seedKey = blockMeta.isSpecial ? blockMeta.rankForFx : blockMeta.key;
       const idx = Math.max(0, RANKS.findIndex((r) => r.key === seedKey));
       if (Math.random() < 0.9 || idx >= RANKS.length - 1) return RANKS[idx];
-      const jump = Math.random() < 0.75 ? 1 : 2;
-      return RANKS[Math.min(RANKS.length - 1, idx + jump)];
+      return RANKS[Math.min(RANKS.length - 1, idx + 1)];
     }
 
     function getRankByKey(key) {
