@@ -2577,6 +2577,7 @@
     const pedestalPads = [];
     const remoteFieldMeshes = [];
     const remoteAvatarMeshes = [];
+  let localAvatarMesh = null;
     const remoteDetailMeshes = [];
     const remoteGrowingMeshes = [];
     const remoteBlockFxMeshes = [];
@@ -5687,6 +5688,17 @@
       addPart(new THREE.BoxGeometry(0.22, 0.11, 0.28), shoeMat, -0.18, 0.22, 0.03);
       addPart(new THREE.BoxGeometry(0.22, 0.11, 0.28), shoeMat, 0.18, 0.22, 0.03);
       return root;
+    }
+
+    // Create a local avatar mesh so the player can see their avatar in 3rd-person.
+    // Use a simple display name for now; this mesh will be repositioned each frame.
+    try {
+      localAvatarMesh = createPixelAvatarMesh(String(state.playerId || multiplayer.playerId || "local"), "You");
+      localAvatarMesh.position.set(player.pos.x, 0, player.pos.z);
+      scene.add(localAvatarMesh);
+    } catch (e) {
+      // If anything fails during initialization (ordering), we'll attempt to create it later.
+      localAvatarMesh = null;
     }
 
     function applyLockedBasesFromWorld(list) {
@@ -9077,6 +9089,17 @@
       checkQuests();
       updatePrompt();
       updateCamera();
+      // keep local avatar mesh in sync and show only in 3rd-person
+      if (localAvatarMesh) {
+        const show = settings.cameraMode === "third-back";
+        localAvatarMesh.visible = !!show;
+        if (show) {
+          // place feet on the ground same as remote avatars
+          localAvatarMesh.position.set(player.pos.x, 0, player.pos.z);
+          // rotate to face the same direction as the player yaw
+          localAvatarMesh.rotation.y = player.yaw;
+        }
+      }
       renderHudOnly();
       renderStatusTimers();
       if (state.shopOpen) {
