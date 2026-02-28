@@ -2294,7 +2294,7 @@
       legendary: ["Golden Griffin", "Crystal Wolf", "Little ball of fury"],
       mythic: ["Celestial Cat", "Moon Serpent", "Starry Elk"],
       godly: ["Omnisphinx", "Thunder Behemoth", "Eternal Fox"],
-      secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger"],
+  secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger", "The Tuff Turtle", "Los Tuff Turtles"],
       transcendent: ["Infinity Serpent", "Quantum Phoenix", "Cosmic Whale"],
       omniversal: ["Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
     };
@@ -2410,7 +2410,9 @@
       "golden griffin": 640, "crystal wolf": 780, "little ball of fury": 700,
       "celestial cat": 2100, "moon serpent": 2550, "starry elk": 2980,
       "omnisphinx": 52000, "thunder behemoth": 84000, "eternal fox": 118000,
-      "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
+  "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
+  "the tuff turtle": 5000000,
+  "los tuff turtles": 15000000,
       "infinity serpent": 120000000, "quantum phoenix": 180000000, "cosmic whale": 245000000,
       "mystery cat": 700000000, "universe hydra": 620000000, "multiverse dragon": 880000000
     };
@@ -4112,9 +4114,9 @@
     }
 
     function rollPlantRank() {
-      const personal = Math.max(1, Number(state.personalLuck || 1));
+      // personal luck removed — only server-wide luck affects plant rank
       const server = Math.max(1, Number(multiplayer.serverLuck || 1));
-      const luckMod = Math.max(1, personal * server);
+      const luckMod = Math.max(1, server);
       const weighted = RANKS.map((rank) => Number(PLANT_ODDS[rank.key] || 0) * luckMod);
       const guaranteed = [];
       for (let i = 0; i < weighted.length; i += 1) {
@@ -4911,8 +4913,7 @@
           seedYieldBonus: state.seedYieldBonus,
           farmPayoutBonus: state.farmPayoutBonus,
           orchardUnlocked: state.orchardUnlocked,
-          personalLuck: state.personalLuck,
-          personalLuckUnlocked: state.personalLuckUnlocked,
+          // personal luck removed
           batsOwned: state.batsOwned,
           equippedBat: state.equippedBat,
           freezeRayOwned: !!state.freezeRayOwned,
@@ -5012,8 +5013,7 @@
         "rebirths", "baseFloors",
         "lastSpinWindow",
         "seedTier", "fertilizerTier", "hatchLuckTier", "plotExpansionTier",
-        "creatureCapTier", "maxCreatures", "seedYieldBonus", "farmPayoutBonus",
-        "personalLuck", "personalLuckUnlocked"
+        "creatureCapTier", "maxCreatures", "seedYieldBonus", "farmPayoutBonus"
       ];
       for (const key of numericKeys) {
         if (typeof loaded[key] === "number" && Number.isFinite(loaded[key])) {
@@ -5043,11 +5043,12 @@
         settings.cameraMode = "first";
         state.tutorialTriedFirstPerson = true;
       }
-      state.hatchLuckTier = Math.max(1, Number(state.hatchLuckTier || 1));
+  state.hatchLuckTier = Math.max(1, Number(state.hatchLuckTier || 1));
       state.rebirths = Math.max(0, Math.min(MAX_REBIRTHS, Math.floor(Number(state.rebirths || 0))));
       state.baseFloors = 1;
-      state.personalLuck = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuck || 1))));
-      state.personalLuckUnlocked = Math.max(state.personalLuck, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuckUnlocked || state.personalLuck || 1))));
+  // personal luck removed; keep defaults (1)
+  state.personalLuck = 1;
+  state.personalLuckUnlocked = 1;
       if (loaded.batsOwned && typeof loaded.batsOwned === "object") {
         state.batsOwned = {};
         for (const b of BAT_DEFS) state.batsOwned[b.key] = !!loaded.batsOwned[b.key];
@@ -7073,14 +7074,58 @@
         addPart(new THREE.BoxGeometry(0.24, 0.04, 0.24), detailMat, [0, 0.01, -0.65], [0.5, 0, 0]);
         addEyes(0.1, 0.73, 0.11, 0.06);
       } else if (archetype === "turtle") {
-        addPart(new THREE.CylinderGeometry(0.42, 0.46, 0.26, 8), bodyMat, [0, 0.08, 0], [0, 0, Math.PI / 2], [1, 1, 1.25]);
-        addPart(new THREE.BoxGeometry(0.46, 0.14, 0.56), detailMat, [0, -0.02, -0.02]);
-        addPart(new THREE.BoxGeometry(0.2, 0.12, 0.2), detailMat, [0, 0.01, 0.46]);
-        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
-        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
-        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
-        addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
-        addEyes(0.06, 0.54, 0.07, 0.055);
+        // Special secret turtle variants: group three smaller turtles for the "tuff" creatures
+        const nameKey = normalizeCreatureNameKey(creatureName);
+        if (nameKey === "thetuffturtle" || nameKey === "lostuffturtles" || nameKey.includes("tuffturtle")) {
+          const tinyScale = 0.58;
+          const spacing = 0.42;
+          for (let i = 0; i < 3; i += 1) {
+            const nx = (i - 1) * spacing;
+            const tg = new THREE.Group();
+            // shell
+            const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.42 * tinyScale, 0.46 * tinyScale, 0.26 * tinyScale, 8), bodyMat);
+            shell.position.set(nx, 0.08 * tinyScale, 0);
+            shell.rotation.set(0, 0, Math.PI / 2);
+            shell.castShadow = true;
+            shell.receiveShadow = true;
+            tg.add(shell);
+            // body underside
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.46 * tinyScale, 0.14 * tinyScale, 0.56 * tinyScale), detailMat);
+            body.position.set(nx, -0.02 * tinyScale, -0.02 * tinyScale);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            tg.add(body);
+            // head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.2 * tinyScale, 0.12 * tinyScale, 0.2 * tinyScale), detailMat);
+            head.position.set(nx, 0.01 * tinyScale, 0.46 * tinyScale);
+            head.castShadow = true;
+            head.receiveShadow = true;
+            tg.add(head);
+            // legs
+            const legGeo = new THREE.CylinderGeometry(0.045 * tinyScale, 0.045 * tinyScale, 0.12 * tinyScale, 6);
+            const leg1 = new THREE.Mesh(legGeo, detailMat); leg1.position.set(nx - 0.24 * tinyScale, -0.08 * tinyScale, 0.2 * tinyScale); leg1.rotation.set(0, 0, Math.PI / 2); leg1.castShadow = true; leg1.receiveShadow = true; tg.add(leg1);
+            const leg2 = leg1.clone(); leg2.position.set(nx + 0.24 * tinyScale, -0.08 * tinyScale, 0.2 * tinyScale); tg.add(leg2);
+            const leg3 = leg1.clone(); leg3.position.set(nx - 0.24 * tinyScale, -0.08 * tinyScale, -0.2 * tinyScale); tg.add(leg3);
+            const leg4 = leg1.clone(); leg4.position.set(nx + 0.24 * tinyScale, -0.08 * tinyScale, -0.2 * tinyScale); tg.add(leg4);
+            // eyes
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06 * tinyScale, 0.06 * tinyScale, 0.06 * tinyScale), eyeMat);
+            eyeL.position.set(nx - 0.06 * tinyScale, 0.06 * tinyScale, 0.54 * tinyScale);
+            const eyeR = eyeL.clone(); eyeR.position.set(nx + 0.06 * tinyScale, 0.06 * tinyScale, 0.54 * tinyScale);
+            tg.add(eyeL); tg.add(eyeR);
+            // slight rotation variety
+            tg.rotation.y = (i - 1) * 0.12;
+            g.add(tg);
+          }
+        } else {
+          addPart(new THREE.CylinderGeometry(0.42, 0.46, 0.26, 8), bodyMat, [0, 0.08, 0], [0, 0, Math.PI / 2], [1, 1, 1.25]);
+          addPart(new THREE.BoxGeometry(0.46, 0.14, 0.56), detailMat, [0, -0.02, -0.02]);
+          addPart(new THREE.BoxGeometry(0.2, 0.12, 0.2), detailMat, [0, 0.01, 0.46]);
+          addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
+          addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, 0.2], [0, 0, Math.PI / 2]);
+          addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [-0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
+          addPart(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6), detailMat, [0.24, -0.08, -0.2], [0, 0, Math.PI / 2]);
+          addEyes(0.06, 0.54, 0.07, 0.055);
+        }
       } else if (archetype === "toad") {
         addPart(new THREE.BoxGeometry(0.62, 0.22, 0.56), bodyMat, [0, 0.01, 0]);
         addPart(new THREE.BoxGeometry(0.42, 0.16, 0.24), bodyMat, [0, 0.11, 0.22]);
@@ -8220,17 +8265,13 @@
 
     function renderShop() {
       shopQuery = String(shopSearchEl.value || "").trim().toLowerCase();
-      shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Personal Luck: x${formatNumber(state.personalLuck || 1)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
+  shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
 
       const seedPack = corePurchases[0];
       const seedPrice = seedPack ? seedPack.getPrice() : 100;
       const targetLuck = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.luckShopTarget || 1000))));
-      const personalLuck = Math.max(1, Math.floor(Number(state.personalLuck || 1)));
-      const personalLuckUnlocked = Math.max(personalLuck, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuckUnlocked || personalLuck))));
-      const personalLuckCost = personalLuckUnlockCost(personalLuckUnlocked, targetLuck);
-      const personalUnlockMode = targetLuck > personalLuckUnlocked;
-      const personalApplyMode = !personalUnlockMode && targetLuck !== personalLuck;
-      const effectiveLuck = Math.max(1, Number(multiplayer.serverLuck || 1) * personalLuck);
+  // personal luck has been removed — effective luck equals server luck
+  const effectiveLuck = Math.max(1, Number(multiplayer.serverLuck || 1));
 
       coreButtonsEl.innerHTML = `
         <div class="shopTabs">
@@ -8245,20 +8286,9 @@
         <div class="shopOfferGrid">
           <div class="shopOfferCard luck">
             <div class="shopOfferTitle">PERSONAL LUCK</div>
-            <div class="shopOfferSub">Spend Stardust to unlock higher luck. Then set your active luck lower anytime.</div>
+            <div class="shopOfferSub">Personal Luck has been removed from this build.</div>
             <div class="shopOdds">
-              <span>Active: x${formatNumber(personalLuck)}</span>
-              <span>Unlocked: x${formatNumber(personalLuckUnlocked)}</span>
-              <span>Target: x${formatNumber(targetLuck)}</span>
-              <span>Effective odds: x${formatNumber(effectiveLuck)}</span>
-            </div>
-            <input id="shopLuckTarget" class="shopInput" type="number" min="1" max="${PERSONAL_LUCK_MAX}" value="${targetLuck}" />
-            <button id="shopBuyLuckPersonal" class="shopPriceBtn"${personalUnlockMode ? ((targetLuck < PERSONAL_LUCK_MIN_UNLOCK_TARGET || state.stardust < personalLuckCost) ? " disabled" : "") : (!personalApplyMode ? " disabled" : "")}>
-              ${personalUnlockMode ? `BUY 💫 ${formatNumber(personalLuckCost)}` : (personalApplyMode ? "APPLY" : "SELECTED")}
-            </button>
-            <div class="shopPriceMeta">${personalUnlockMode ? `Unlock target for 💫 ${formatNumber(personalLuckCost)}${targetLuck < PERSONAL_LUCK_MIN_UNLOCK_TARGET ? ` (minimum unlock is x${formatNumber(PERSONAL_LUCK_MIN_UNLOCK_TARGET)})` : ""}` : (personalApplyMode ? "Apply unlocked target for free." : "Already active.")}</div>
-            <div class="shopOdds">
-              ${PERSONAL_LUCK_STARDUST_PACKS.map((p) => `<button class="shopPriceBtn personalLuckPresetBtn" data-luck="${p.luck}" style="min-width:88px;padding:6px 8px;font-size:12px">x${formatNumber(p.luck)} • 💫${formatNumber(p.stardust)}</button>`).join("")}
+              <span>Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}</span>
             </div>
           </div>
 
@@ -8330,41 +8360,7 @@
         buyItem(seedPrice, seedPack.buy);
         renderShop();
       });
-      const shopLuckInput = document.getElementById("shopLuckTarget");
-      const shopLuckBtn = document.getElementById("shopBuyLuckPersonal");
-      if (shopLuckInput && shopLuckBtn) {
-        const updatePrice = () => {
-          const target = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(shopLuckInput.value || 1))));
-          state.luckShopTarget = target;
-          shopLuckInput.value = String(target);
-          const active = Math.max(1, Math.floor(Number(state.personalLuck || 1)));
-          const unlocked = Math.max(active, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuckUnlocked || active))));
-          const unlockMode = target > unlocked;
-          const applyMode = !unlockMode && target !== active;
-          const cost = personalLuckUnlockCost(unlocked, target);
-          if (unlockMode) {
-            shopLuckBtn.textContent = `BUY 💫 ${formatNumber(cost)}`;
-            shopLuckBtn.disabled = target < PERSONAL_LUCK_MIN_UNLOCK_TARGET || state.stardust < cost;
-          } else if (applyMode) {
-            shopLuckBtn.textContent = "APPLY";
-            shopLuckBtn.disabled = false;
-          } else {
-            shopLuckBtn.textContent = "SELECTED";
-            shopLuckBtn.disabled = true;
-          }
-        };
-        shopLuckInput.addEventListener("input", updatePrice);
-        shopLuckBtn.addEventListener("click", () => buyPersonalLuckInShop(state.luckShopTarget));
-        coreButtonsEl.querySelectorAll(".personalLuckPresetBtn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const preset = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(btn.dataset.luck || 1))));
-            state.luckShopTarget = preset;
-            shopLuckInput.value = String(preset);
-            updatePrice();
-          });
-        });
-        updatePrice();
-      }
+      // Personal luck UI removed — no interactive personal luck controls.
       const bindServerLuckStardustBtn = (btn) => {
         btn.addEventListener("click", () => {
           const luck = Math.max(2, Number(btn.dataset.luck || 2));
@@ -8522,42 +8518,9 @@
       }
     }
 
-    async function buyPersonalLuckInShop(targetLuck) {
-      const target = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(targetLuck) || 1)));
-      const current = Math.max(1, Math.floor(Number(state.personalLuck || 1)));
-      const unlocked = Math.max(current, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(state.personalLuckUnlocked || current))));
-      if (target <= unlocked) {
-        if (target === current) {
-          state.info = "Personal luck already set to that value.";
-          updateUI();
-          return;
-        }
-        state.personalLuck = target;
-        state.info = `Personal luck set to x${formatNumber(state.personalLuck)}.`;
-        updateUI();
-        renderShop();
-        return;
-      }
-      if (target < PERSONAL_LUCK_MIN_UNLOCK_TARGET) {
-        state.info = `Minimum unlock target is x${formatNumber(PERSONAL_LUCK_MIN_UNLOCK_TARGET)}.`;
-        updateUI();
-        return;
-      }
-      const localCost = personalLuckUnlockCost(unlocked, target);
-      if (localCost < 1) {
-        state.info = "Choose a higher personal luck value.";
-        updateUI();
-        return;
-      }
-      if (state.stardust < localCost) {
-        state.info = `Need 💫 ${formatNumber(localCost)} for personal luck x${formatNumber(target)}.`;
-        updateUI();
-        return;
-      }
-      state.stardust = Math.max(0, Number(state.stardust || 0) - localCost);
-      state.personalLuckUnlocked = target;
-      state.personalLuck = target;
-      state.info = `Unlocked personal luck x${formatNumber(state.personalLuck)} for 💫 ${formatNumber(localCost)}.`;
+    async function buyPersonalLuckInShop(_targetLuck) {
+      // Personal luck feature removed — no-op. Inform the player.
+      state.info = "Personal Luck has been removed from this build.";
       updateUI();
       renderShop();
     }
@@ -8627,8 +8590,7 @@
       hud.innerHTML = `
         <div class="row"><span class="label">Profile</span><span class="stat">${badge}</span></div>
         <div class="row"><span class="label">Server</span><span class="stat">${multiplayer.serverName} (${multiplayer.serverId})</span></div>
-        <div class="row"><span class="label">Personal Luck</span><span class="stat">x${formatNumber(state.personalLuck || 1)}</span></div>
-        <div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>
+  <div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>
         <div class="row"><span class="label">PvP Tool</span><span class="stat">${abilityLabel}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
         <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? (stealPaused ? "Steal paused" : `Stealing ${formatNumber(stealLeft)}s`) : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
         <div class="row"><span class="label">Base Lock</span><span class="stat">${ownLockLeft > 0 ? `${formatNumber(ownLockLeft)}s left` : "Ready"}</span></div>
@@ -8670,7 +8632,7 @@
       renderIndexPanel();
       renderChat();
       if (state.shopOpen) {
-        shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Personal Luck: x${formatNumber(state.personalLuck || 1)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
+        shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
       }
     }
 
@@ -9103,7 +9065,7 @@
       renderHudOnly();
       renderStatusTimers();
       if (state.shopOpen) {
-        shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Personal Luck: x${formatNumber(state.personalLuck || 1)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
+        shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
       }
       if (rebirthPanelEl.style.display !== "none") renderRebirthPanel();
       if (wheelPanelEl.style.display !== "none") renderWheelPanel();
