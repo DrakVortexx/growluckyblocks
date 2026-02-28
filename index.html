@@ -1727,8 +1727,8 @@
       <div id="serverConfigPanel">
         <div id="serverConfigTitle">Private Server Config</div>
         <div id="serverSettingsRow" style="display:grid;gap:6px;margin-bottom:8px">
-          <label class="authCheckRow" style="margin:0"><input id="serverCfgAllowSteal" type="checkbox" checked /> Allow stealing</label>
-          <label class="authCheckRow" style="margin:0"><input id="serverCfgAllowPvp" type="checkbox" checked /> Allow PvP hits</label>
+          <input id="serverCfgDescription" maxlength="180" placeholder="Server description" style="width:100%;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:8px 9px;outline:none" />
+          <label class="authCheckRow" style="margin:0"><input id="serverCfgAllowOthersLuck" type="checkbox" checked /> Allow invited players to buy server luck</label>
           <div><button id="serverCfgSaveBtn" class="serverConfigBtn" style="width:100%">Save Settings</button></div>
         </div>
         <div id="serverWhitelistRow">
@@ -1888,6 +1888,13 @@
     <div class="srow">
       SFX Volume: <span id="settingsSfxValue" class="sval">100%</span>
       <input id="settingsSfx" type="range" min="0" max="1.5" step="0.05" value="1" />
+    </div>
+    <div class="srow">
+      Camera View:
+      <select id="settingsCameraMode" style="width:100%;margin-top:4px;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:7px 8px;outline:none">
+        <option value="first">First Person</option>
+        <option value="third-back">Third Person (Back)</option>
+      </select>
     </div>
     <label class="authCheckRow" style="margin:4px 0 8px"><input id="settingsInvertY" type="checkbox" /> Invert Look Y</label>
     <label class="authCheckRow" style="margin:0"><input id="settingsMobileHud" type="checkbox" /> Show Mobile Controls</label>
@@ -2075,7 +2082,7 @@
       cooldownSec: 20,
       desc: "Freezes a target player for 10s."
     });
-    const TUTORIAL_LAST_STEP = 7;
+    const TUTORIAL_LAST_STEP = 8;
 
     const canvas = document.getElementById("game");
     const crosshairEl = document.getElementById("crosshair");
@@ -2145,8 +2152,8 @@
     const serverWhitelistAddBtnEl = document.getElementById("serverWhitelistAddBtn");
     const serverWhitelistListEl = document.getElementById("serverWhitelistList");
     const serverConfigMsgEl = document.getElementById("serverConfigMsg");
-    const serverCfgAllowStealEl = document.getElementById("serverCfgAllowSteal");
-    const serverCfgAllowPvpEl = document.getElementById("serverCfgAllowPvp");
+    const serverCfgDescriptionEl = document.getElementById("serverCfgDescription");
+    const serverCfgAllowOthersLuckEl = document.getElementById("serverCfgAllowOthersLuck");
     const serverCfgSaveBtnEl = document.getElementById("serverCfgSaveBtn");
     const authTabSignupEl = document.getElementById("authTabSignup");
     const authTabLoginEl = document.getElementById("authTabLogin");
@@ -2193,6 +2200,7 @@
     const settingsLookValueEl = document.getElementById("settingsLookValue");
     const settingsSfxEl = document.getElementById("settingsSfx");
     const settingsSfxValueEl = document.getElementById("settingsSfxValue");
+    const settingsCameraModeEl = document.getElementById("settingsCameraMode");
     const settingsInvertYEl = document.getElementById("settingsInvertY");
     const settingsMobileHudEl = document.getElementById("settingsMobileHud");
     const indexPanelEl = document.getElementById("indexPanel");
@@ -2538,6 +2546,8 @@
       },
       tutorialCompleted: false,
       tutorialStep: 0,
+      tutorialTriedThirdPerson: false,
+      tutorialTriedFirstPerson: false,
       quests: [
         { id: "q1", text: "Harvest 5 crops", target: 5, type: "harvest", reward: 550, done: false },
         { id: "q2", text: "Collect 8 creatures", target: 8, type: "creatures", reward: 2500, done: false },
@@ -2593,6 +2603,7 @@
       lookSensitivity: 1,
       invertY: false,
       sfxVolume: 1,
+      cameraMode: "first",
       showMobileHud: MOBILE_DETECTED
     };
     const mobileInput = {
@@ -3526,6 +3537,8 @@
         case 6:
           return "Press F on the placed Lucky Block to open it and get a creature.";
         case 7:
+          return "Lock your base, then open the Settings menu and try Third Person (Back). Switch back to First Person to compare which you like best.";
+        case 8:
           return "Tutorial complete. Have fun and continue building your creature collection.";
         default:
           return "";
@@ -3580,6 +3593,15 @@
       return null;
     }
 
+    function tutorialUiTargetPosition(step = Number(state.tutorialStep || 0)) {
+      const s = Math.floor(step);
+      if (s === 7 && dockSettingsBtn instanceof HTMLElement) {
+        const r = dockSettingsBtn.getBoundingClientRect();
+        return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+      }
+      return null;
+    }
+
     function tutorialWorldToScreen(worldPos) {
       if (!worldPos || !camera) return null;
       const ndc = worldPos.clone().project(camera);
@@ -3623,6 +3645,10 @@
         advanceTutorialStep();
       } else if (step === 6 && key === "open-block") {
         advanceTutorialStep();
+      } else if (step === 7 && key === "camera-third") {
+        state.tutorialTriedThirdPerson = true;
+      } else if (step === 7 && key === "camera-first") {
+        state.tutorialTriedFirstPerson = true;
       }
     }
 
@@ -3636,6 +3662,9 @@
       const step = Math.floor(Number(state.tutorialStep || 0));
       if (step === 2 && plots.some((p) => Number(p?.stage || 0) === 2)) {
         advanceTutorialStep();
+      } else if (step === 7) {
+        // open settings for the player to try camera modes during tutorial
+        try { toggleSettingsPanel(true); } catch (e) {}
       } else if (step === 4 && pedestals[0]) {
         const p = pedestals[0].position;
         const d = Math.hypot(Number(player.pos.x || 0) - Number(p.x || 0), Number(player.pos.z || 0) - Number(p.z || 0));
@@ -3644,6 +3673,8 @@
         advanceTutorialStep();
       } else if (step === 6 && creatures.length > 0) {
         advanceTutorialStep();
+      } else if (step === 7 && state.tutorialTriedThirdPerson && state.tutorialTriedFirstPerson) {
+        advanceTutorialStep();
       }
 
       if (!tutorialIsActive()) return;
@@ -3651,7 +3682,7 @@
       const renderStep = Math.floor(Number(state.tutorialStep || 0));
       tutorialPanelEl.classList.add("show");
       tutorialTitleEl.textContent = "Tutorial";
-      tutorialProgressEl.textContent = renderStep >= TUTORIAL_LAST_STEP ? "Complete" : `Step ${renderStep + 1}/7`;
+      tutorialProgressEl.textContent = renderStep >= TUTORIAL_LAST_STEP ? "Complete" : `Step ${renderStep + 1}/${TUTORIAL_LAST_STEP}`;
       tutorialTextEl.textContent = tutorialStepText(renderStep);
       tutorialContinueEl.style.display = renderStep >= TUTORIAL_LAST_STEP ? "inline-block" : "none";
 
@@ -3660,8 +3691,9 @@
         return;
       }
 
-      const target = tutorialTargetPosition(renderStep);
-      const screen = tutorialWorldToScreen(target);
+      const uiTarget = tutorialUiTargetPosition(renderStep);
+      const worldTarget = tutorialTargetPosition(renderStep);
+      const screen = uiTarget || tutorialWorldToScreen(worldTarget);
       if (!screen) {
         tutorialArrowEl.style.display = "none";
         return;
@@ -3737,6 +3769,7 @@
           const sfx = Number(raw.sfxVolume);
           if (Number.isFinite(look)) settings.lookSensitivity = Math.max(0.35, Math.min(2.5, look));
           if (Number.isFinite(sfx)) settings.sfxVolume = Math.max(0, Math.min(1.5, sfx));
+          settings.cameraMode = String(raw.cameraMode || "first").toLowerCase() === "third-back" ? "third-back" : "first";
           settings.invertY = !!raw.invertY;
           settings.showMobileHud = !!raw.showMobileHud;
         }
@@ -3751,6 +3784,7 @@
       settingsDeviceEl.textContent = MOBILE_DETECTED ? "Mobile / Touch" : "Desktop / Keyboard+Mouse";
       settingsLookEl.value = String(settings.lookSensitivity);
       settingsSfxEl.value = String(settings.sfxVolume);
+      settingsCameraModeEl.value = settings.cameraMode === "third-back" ? "third-back" : "first";
       settingsInvertYEl.checked = !!settings.invertY;
       settingsMobileHudEl.checked = !!settings.showMobileHud;
       settingsLookValueEl.textContent = `${settings.lookSensitivity.toFixed(2)}x`;
@@ -4891,6 +4925,8 @@
           indexBlueMoonSeen: state.indexBlueMoonSeen,
           tutorialCompleted: !!state.tutorialCompleted,
           tutorialStep: Math.max(0, Math.floor(Number(state.tutorialStep || 0))),
+          tutorialTriedThirdPerson: !!state.tutorialTriedThirdPerson,
+          tutorialTriedFirstPerson: !!state.tutorialTriedFirstPerson,
           quests: state.quests.map((q) => ({ id: q.id, done: q.done })),
           info: state.info
         },
@@ -4997,10 +5033,14 @@
       } else if (!state.tutorialCompleted) {
         state.tutorialStep = 0;
       }
+      state.tutorialTriedThirdPerson = !!loaded.tutorialTriedThirdPerson;
+      state.tutorialTriedFirstPerson = !!loaded.tutorialTriedFirstPerson;
       if (state.tutorialCompleted) {
         state.tutorialStep = TUTORIAL_LAST_STEP + 1;
       } else {
         state.tutorialStep = Math.min(TUTORIAL_LAST_STEP, Math.max(0, Math.floor(Number(state.tutorialStep || 0))));
+        settings.cameraMode = "first";
+        state.tutorialTriedFirstPerson = true;
       }
       state.hatchLuckTier = Math.max(1, Number(state.hatchLuckTier || 1));
       state.rebirths = Math.max(0, Math.min(MAX_REBIRTHS, Math.floor(Number(state.rebirths || 0))));
@@ -7528,8 +7568,8 @@
       if (gameplayUiOpen()) return;
       if (Number(state.stunUntil || 0) > realNowSec()) return;
       const groundY = 1.65;
-      const gravity = 22;
-      const jumpVelocity = 8.5;
+      const gravity = 17.5;
+      const jumpVelocity = 7.8;
 
       const fwd = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
       const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
@@ -7562,6 +7602,7 @@
         player.onGround = false;
       }
       player.velY -= gravity * dt;
+      player.velY *= 0.992;
       player.pos.y += player.velY * dt;
       if (player.pos.y <= groundY) {
         player.pos.y = groundY;
@@ -7573,10 +7614,23 @@
     }
 
     function updateCamera() {
-      camera.position.copy(player.pos);
+      const mode = settings.cameraMode === "third-back" ? "third-back" : "first";
       camera.rotation.order = "YXZ";
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
+      if (mode === "third-back") {
+        const back = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)).multiplyScalar(5.2);
+        const height = 2.2;
+        const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.1, player.pos.z);
+        const camPos = new THREE.Vector3(
+          target.x + back.x,
+          target.y + height,
+          target.z + back.z
+        );
+        camera.position.copy(camPos);
+      } else {
+        camera.position.copy(player.pos);
+      }
     }
 
     function updateCrops(t) {
@@ -8846,6 +8900,12 @@
       });
       settingsSfxEl.addEventListener("input", () => {
         settings.sfxVolume = Math.max(0, Math.min(1.5, Number(settingsSfxEl.value || 1)));
+        updateSettingsAndSave();
+      });
+      settingsCameraModeEl.addEventListener("change", () => {
+        settings.cameraMode = String(settingsCameraModeEl.value || "first").toLowerCase() === "third-back" ? "third-back" : "first";
+        if (settings.cameraMode === "third-back") tutorialTrigger("camera-third");
+        if (settings.cameraMode === "first") tutorialTrigger("camera-first");
         updateSettingsAndSave();
       });
       settingsInvertYEl.addEventListener("change", () => {

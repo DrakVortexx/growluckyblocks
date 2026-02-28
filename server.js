@@ -779,8 +779,8 @@ function serverTag(meta, viewerId = "") {
     serverLuckUntil: luckUntil,
     serverLuckRemainingSec: luckUntil > nowSec ? Math.max(0, Math.ceil(luckUntil - nowSec)) : 0,
     whitelistCount: meta.whitelistPlayerIds instanceof Set ? meta.whitelistPlayerIds.size : 0,
-    allowStealing: meta.allowStealing !== false,
-    allowPvp: meta.allowPvp !== false,
+    description: String(meta.description || "").slice(0, 180),
+    allowOthersServerLuck: meta.allowOthersServerLuck !== false,
     canConfigure: !!(meta.isPrivate && isOwner)
   };
 }
@@ -804,6 +804,7 @@ function ensureServerState(serverId, opts = {}) {
     ownerId: String(opts.ownerId || ""),
     isPrivate: !!opts.isPrivate,
     ownerUsername: String(opts.ownerUsername || ""),
+    description: String(opts.description || "").slice(0, 180),
     createdAt: Date.now(),
     serverLuck: Math.max(1, Number(opts.serverLuck || 1)),
     serverLuckUntil: Number(opts.serverLuckUntil || 0),
@@ -821,8 +822,7 @@ function ensureServerState(serverId, opts = {}) {
     batCooldownUntilByPlayer: new Map(),
     whitelistPlayerIds: new Set(),
     whitelistUsernames: new Set(),
-    allowStealing: opts.allowStealing !== false,
-    allowPvp: opts.allowPvp !== false,
+    allowOthersServerLuck: opts.allowOthersServerLuck !== false,
     chatMessages: [],
     recentlyStolenByPlayer: new Map(),
     baseLockUntilByPlayer: new Map(),
@@ -1121,9 +1121,9 @@ function serverStateToDoc(state) {
     name: cleanServerName(state.name || "Garden Server"),
     ownerId: String(state.ownerId || ""),
     ownerUsername: cleanUsername(state.ownerUsername || ""),
+    description: String(state.description || "").slice(0, 180),
     isPrivate: !!state.isPrivate,
-    allowStealing: state.allowStealing !== false,
-    allowPvp: state.allowPvp !== false,
+    allowOthersServerLuck: state.allowOthersServerLuck !== false,
     whitelistPlayerIds: [...(state.whitelistPlayerIds instanceof Set ? state.whitelistPlayerIds : [])].map((v) => String(v || "")).filter(Boolean).slice(0, 256),
     whitelistUsernames: [...(state.whitelistUsernames instanceof Set ? state.whitelistUsernames : [])].map((v) => cleanUsername(v)).filter(Boolean).slice(0, 256),
     createdAt: Number(state.createdAt || Date.now()),
@@ -1162,12 +1162,12 @@ async function loadPersistedServers() {
         ownerId: String(doc.ownerId || ""),
         ownerUsername: cleanUsername(doc.ownerUsername || ""),
         isPrivate: !!doc.isPrivate,
-        allowStealing: doc.allowStealing !== false,
-        allowPvp: doc.allowPvp !== false
+        description: String(doc.description || "").slice(0, 180),
+        allowOthersServerLuck: doc.allowOthersServerLuck !== false
       });
       state.createdAt = Number(doc.createdAt || state.createdAt || Date.now());
-      state.allowStealing = doc.allowStealing !== false;
-      state.allowPvp = doc.allowPvp !== false;
+      state.description = String(doc.description || state.description || "").slice(0, 180);
+      state.allowOthersServerLuck = doc.allowOthersServerLuck !== false;
       if (Array.isArray(doc.whitelistPlayerIds)) {
         state.whitelistPlayerIds = new Set(doc.whitelistPlayerIds.map((v) => String(v || "")).filter(Boolean));
       }
@@ -2304,8 +2304,8 @@ app.post("/api/servers/create", async (req, res) => {
       ownerId: playerId,
       ownerUsername: cleanUsername(profile?.profile?.username || ""),
       isPrivate,
-      allowStealing: true,
-      allowPvp: true
+      description: "",
+      allowOthersServerLuck: true
     });
     await saveServerStateDoc(state);
     res.json({
@@ -2341,8 +2341,8 @@ app.get("/api/servers/config", async (req, res) => {
       server: serverTag(state, uid),
       whitelist: listWhitelistUsernames(state),
       settings: {
-        allowStealing: state.allowStealing !== false,
-        allowPvp: state.allowPvp !== false
+        description: String(state.description || "").slice(0, 180),
+        allowOthersServerLuck: state.allowOthersServerLuck !== false
       }
     });
   } catch (err) {
@@ -2448,13 +2448,13 @@ app.post("/api/servers/config/settings", async (req, res) => {
       res.status(403).json({ error: "forbidden" });
       return;
     }
-    state.allowStealing = req.body?.allowStealing === false ? false : true;
-    state.allowPvp = req.body?.allowPvp === false ? false : true;
+    state.description = String(req.body?.description || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    state.allowOthersServerLuck = req.body?.allowOthersServerLuck === false ? false : true;
     await saveServerStateDoc(state);
     res.json({
       ok: true,
       server: serverTag(state, uid),
-      settings: { allowStealing: state.allowStealing, allowPvp: state.allowPvp },
+      settings: { description: state.description, allowOthersServerLuck: state.allowOthersServerLuck },
       servers: listServersForPlayer(uid)
     });
   } catch (err) {
@@ -2753,10 +2753,6 @@ app.post("/api/steal/start", async (req, res) => {
       return;
     }
     const serverState = ensureServerState(serverId, {});
-    if (serverState.allowStealing === false) {
-      res.status(400).json({ error: "stealing disabled on this server" });
-      return;
-    }
     if (!serverState.activeSlots.has(playerId) || !serverState.activeSlots.has(ownerId)) {
       res.status(400).json({ error: "players must be online in this server" });
       return;
@@ -3082,10 +3078,6 @@ app.post("/api/pvp/hit", async (req, res) => {
     }
 
     const serverState = ensureServerState(serverId, {});
-    if (serverState.allowPvp === false) {
-      res.status(400).json({ error: "pvp disabled on this server" });
-      return;
-    }
     if (!serverState.activeSlots.has(playerId) || !serverState.activeSlots.has(targetPlayerId)) {
       res.status(400).json({ error: "target not online in this server" });
       return;
@@ -3284,6 +3276,11 @@ app.post("/api/server/luck/buy", async (req, res) => {
     }
 
     const serverState = ensureServerState(serverId, {});
+    const isOwner = String(serverState.ownerId || "") === String(uid || "");
+    if (!isOwner && serverState.allowOthersServerLuck === false) {
+      res.status(403).json({ error: "only the server owner can activate server luck" });
+      return;
+    }
     normalizeServerLuckWindow(serverState);
     const currentLuck = Math.max(1, Math.floor(Number(serverState.serverLuck || 1)));
     if (targetLuck <= currentLuck) {
