@@ -3235,8 +3235,15 @@
     }
 
     function isTuffTurtleCreatureName(name) {
+      // This identifies the single 'The Tuff Turtle' which must use the GLB model only.
       const key = normalizeCreatureNameKey(name);
-      return key === "thetuffturtle" || key === "lostuffturtles" || key.includes("tuffturtle");
+      return key === "thetuffturtle";
+    }
+
+    function isTuffTurtleGroupName(name) {
+      // This identifies the grouped variant 'los tuff turtles' which keeps the primitive group
+      const key = normalizeCreatureNameKey(name);
+      return key === "lostuffturtles";
     }
 
     function applyTuffTurtleModelToCreatureGroup(group) {
@@ -7154,9 +7161,11 @@
         addPart(new THREE.BoxGeometry(0.24, 0.04, 0.24), detailMat, [0, 0.01, -0.65], [0.5, 0, 0]);
         addEyes(0.1, 0.73, 0.11, 0.06);
       } else if (archetype === "turtle") {
-        // Special secret turtle variants: group three smaller turtles for the "tuff" creatures
+        // Special secret turtle variants: keep grouped three smaller turtles only for the
+        // 'los tuff turtles' variant. The single 'The Tuff Turtle' will be GLB-only and
+        // should not fall back to primitives here.
         const nameKey = normalizeCreatureNameKey(creatureName);
-        if (nameKey === "thetuffturtle" || nameKey === "lostuffturtles" || nameKey.includes("tuffturtle")) {
+        if (nameKey === "lostuffturtles") {
           const tinyScale = 0.58;
           const spacing = 0.42;
           for (let i = 0; i < 3; i += 1) {
