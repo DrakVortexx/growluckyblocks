@@ -100,6 +100,8 @@ const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Void Kraken", rankKey: "secret", rate: 1200000 },
   { name: "Ghost Unicorn", rankKey: "secret", rate: 2100000 },
   { name: "Arcane Tiger", rankKey: "secret", rate: 2950000 },
+  { name: "The Tuff Turtle", rankKey: "secret", rate: 5000000 },
+  { name: "los tuff turtles", rankKey: "secret", rate: 15000000 },
   { name: "Infinity Serpent", rankKey: "transcendent", rate: 120000000 },
   { name: "Quantum Phoenix", rankKey: "transcendent", rate: 180000000 },
   { name: "Cosmic Whale", rankKey: "transcendent", rate: 245000000 },

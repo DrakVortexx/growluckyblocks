@@ -2432,6 +2432,7 @@
     });
     const FAT_CAT_GLB_PATH = "./assets/creatures/basic/FatEasterCat.glb";
     const MYSTERY_CAT_GLB_PATH = "./assets/creatures/omniversal/MysteryCat.glb";
+  const TUFF_TURTLE_GLB_PATH = "./assets/creatures/secrets/TuffTurtle.glb";
     const gltfLoader = new GLTFLoader();
     const blockModelStateByRank = Object.fromEntries(
       Object.entries(BLOCK_GLB_PATH_BY_RANK).map(([rankKey, path]) => [
@@ -2439,12 +2440,15 @@
         { rankKey, path, template: null, loadStarted: false, pending: new Set() }
       ])
     );
-    let fatCatModelTemplate = null;
-    let fatCatModelLoadStarted = false;
-    const pendingFatCatCreatureGroups = new Set();
-    let mysteryCatModelTemplate = null;
-    let mysteryCatModelLoadStarted = false;
-    const pendingMysteryCatCreatureGroups = new Set();
+  let fatCatModelTemplate = null;
+  let fatCatModelLoadStarted = false;
+  const pendingFatCatCreatureGroups = new Set();
+  let mysteryCatModelTemplate = null;
+  let mysteryCatModelLoadStarted = false;
+  const pendingMysteryCatCreatureGroups = new Set();
+  let tuffTurtleModelTemplate = null;
+  let tuffTurtleModelLoadStarted = false;
+  const pendingTuffTurtleCreatureGroups = new Set();
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW_QUALITY_MOBILE });
     renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_QUALITY_MOBILE ? 1.25 : 2));
@@ -3227,6 +3231,82 @@
       }, undefined, (err) => {
         console.warn("Failed to load MysteryCat.glb", err);
         pendingMysteryCatCreatureGroups.clear();
+      });
+    }
+
+    function isTuffTurtleCreatureName(name) {
+      const key = normalizeCreatureNameKey(name);
+      return key === "thetuffturtle" || key === "lostuffturtles" || key.includes("tuffturtle");
+    }
+
+    function applyTuffTurtleModelToCreatureGroup(group) {
+      if (!group) return;
+      if (!tuffTurtleModelTemplate) {
+        pendingTuffTurtleCreatureGroups.add(group);
+        return;
+      }
+      pendingTuffTurtleCreatureGroups.delete(group);
+      let root = group.userData.tuffTurtleModelRoot || null;
+      if (!root) {
+        root = tuffTurtleModelTemplate.clone(true);
+        root.traverse((node) => {
+          if (!node?.isMesh) return;
+          if (Array.isArray(node.material)) {
+            node.material = node.material.map((m) => (m?.clone ? m.clone() : m));
+          } else if (node.material?.clone) {
+            node.material = node.material.clone();
+          }
+          node.castShadow = true;
+          node.receiveShadow = true;
+        });
+        group.add(root);
+        group.userData.tuffTurtleModelRoot = root;
+      }
+      setCreatureShellVisible(group, false);
+      group.userData.tuffTurtleModelActive = true;
+    }
+
+    function clearTuffTurtleModelFromCreatureGroup(group) {
+      if (!group) return;
+      pendingTuffTurtleCreatureGroups.delete(group);
+      const root = group.userData.tuffTurtleModelRoot || null;
+      if (root) group.remove(root);
+      group.userData.tuffTurtleModelRoot = null;
+      group.userData.tuffTurtleModelActive = false;
+      setCreatureShellVisible(group, true);
+    }
+
+    function loadTuffTurtleModel() {
+      if (tuffTurtleModelLoadStarted) return;
+      tuffTurtleModelLoadStarted = true;
+      gltfLoader.load(TUFF_TURTLE_GLB_PATH, (gltf) => {
+        const root = gltf?.scene;
+        if (!root) return;
+        const box = new THREE.Box3().setFromObject(root);
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+        const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
+        const scale = 0.95 / maxDim;
+        root.scale.setScalar(scale);
+        root.position.sub(center.multiplyScalar(scale));
+        root.position.y -= 0.08;
+        root.traverse((node) => {
+          if (!node?.isMesh) return;
+          node.castShadow = true;
+          node.receiveShadow = true;
+        });
+        tuffTurtleModelTemplate = root;
+        const pending = [...pendingTuffTurtleCreatureGroups];
+        pendingTuffTurtleCreatureGroups.clear();
+        for (const group of pending) {
+          if (!group?.parent) continue;
+          applyTuffTurtleModelToCreatureGroup(group);
+        }
+      }, undefined, (err) => {
+        console.warn("Failed to load TuffTurtle.glb", err);
+        pendingTuffTurtleCreatureGroups.clear();
       });
     }
 
@@ -7237,13 +7317,20 @@
       };
       if (isFatCatCreatureName(creatureName)) {
         clearMysteryCatModelFromCreatureGroup(g);
+        clearTuffTurtleModelFromCreatureGroup(g);
         applyFatCatModelToCreatureGroup(g);
       } else if (isMysteryCatCreatureName(creatureName)) {
         clearFatCatModelFromCreatureGroup(g);
+        clearTuffTurtleModelFromCreatureGroup(g);
         applyMysteryCatModelToCreatureGroup(g);
+      } else if (isTuffTurtleCreatureName(creatureName)) {
+        clearFatCatModelFromCreatureGroup(g);
+        clearMysteryCatModelFromCreatureGroup(g);
+        applyTuffTurtleModelToCreatureGroup(g);
       } else {
         clearFatCatModelFromCreatureGroup(g);
         clearMysteryCatModelFromCreatureGroup(g);
+        clearTuffTurtleModelFromCreatureGroup(g);
       }
       return g;
     }
@@ -9010,6 +9097,7 @@
       loadConfiguredBlockModels();
       loadFatCatModel();
       loadMysteryCatModel();
+  loadTuffTurtleModel();
       buildGround();
       buildBlueMoonSky();
       buildShack();
