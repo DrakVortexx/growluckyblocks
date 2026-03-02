@@ -1716,6 +1716,9 @@
       <div class="serverSub">Join an existing server or create your own. Player count updates in real time while players are online. Creating a server costs 💫 25 Stardust.</div>
       <input id="serverSearch" placeholder="Search by server name, id, or owner" maxlength="40" style="width:100%;margin-bottom:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:9px 10px;outline:none" />
       <div id="serverRows"></div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button id="playOfflineBtn" style="background:linear-gradient(180deg,#ff6b35,#d84315);color:white;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer">🎮 Play Offline</button>
+      </div>
       <div class="serverCreate">
         <input id="serverName" placeholder="New server name" maxlength="28" />
         <label class="authCheckRow" style="margin:0"><input id="serverPrivate" type="checkbox" /> Private</label>
@@ -2152,6 +2155,7 @@
     const serverPrivateEl = document.getElementById("serverPrivate");
     const serverRefreshBtn = document.getElementById("serverRefreshBtn");
     const serverCreateBtn = document.getElementById("serverCreateBtn");
+    const playOfflineBtn = document.getElementById("playOfflineBtn");
     const serverMsgEl = document.getElementById("serverMsg");
     const serverConfigPanelEl = document.getElementById("serverConfigPanel");
     const serverConfigTitleEl = document.getElementById("serverConfigTitle");
@@ -2292,7 +2296,8 @@
       remoteSnapshots: {},
       profile: { username: "", email: "" },
       isAdmin: false,
-      chatMessages: []
+      chatMessages: [],
+      offlineMode: false
     };
 
     const CREATURE_NAMES_BY_RANK = {
@@ -4585,6 +4590,32 @@
       }
     }
 
+    function startOfflineMode() {
+      multiplayer.offlineMode = true;
+      multiplayer.serverId = "offline-singleplayer";
+      multiplayer.serverName = "Offline Singleplayer";
+      multiplayer.connected = false;
+      multiplayer.playerId = "offline-player";
+      multiplayer.profile.username = "Offline Player";
+      multiplayer.slot = 0;
+      multiplayer.maxPlayers = 1;
+      multiplayer.allowStealing = false;
+      multiplayer.allowPvp = false;
+      multiplayer.serverLuck = 1;
+      multiplayer.serverLuckUntil = 0;
+      multiplayer.forcedBlueMoonUntil = 0;
+      multiplayer.forcedBlueMoonEventId = "";
+      multiplayer.spawnDrops = [];
+      multiplayer.occupiedSlots = [0];
+      closeServerConfigPanel();
+      serverGateEl.classList.remove("show");
+      authGateEl.classList.remove("show");
+      if (!gameStarted) {
+        gameStarted = true;
+        startSingleplayerGame();
+      }
+    }
+
     function displayNameFor(playerId, fallback = "") {
       if (!playerId) return fallback || "Unknown";
       if (playerId === multiplayer.playerId) {
@@ -6800,9 +6831,9 @@
       const dx = slotOffsetX(multiplayer.slot);
       const applyMaster = settings.baseSkin === "master" && state.masterBaseOwned;
       const padMat = new THREE.MeshStandardMaterial({
-        color: applyMaster ? 0xcb3b3b : 0x8a653f,
-        emissive: applyMaster ? 0x220000 : 0x000000,
-        emissiveIntensity: applyMaster ? 0.28 : 0.0
+        color: applyMaster ? 0xff2200 : 0x8a653f,
+        emissive: applyMaster ? 0xff4400 : 0x000000,
+        emissiveIntensity: applyMaster ? 0.8 : 0.0
       });
       const pad = new THREE.Mesh(
         new THREE.BoxGeometry(18, 0.36, 11.8),
@@ -6854,9 +6885,9 @@
       try {
         const applyMaster = settings.baseSkin === "master" && state.masterBaseOwned;
         const desired = {
-          color: 0xcb3b3b,
-          emissive: 0x220000,
-          emissiveIntensity: 0.28
+          color: 0xff2200,
+          emissive: 0xff4400,
+          emissiveIntensity: 0.8
         };
         scene.traverse((node) => {
           if (!node || !node.isMesh) return;
@@ -8801,8 +8832,8 @@
       dockAdminBtn.style.display = multiplayer.isAdmin ? "block" : "none";
       hud.innerHTML = `
         <div class="row"><span class="label">Profile</span><span class="stat">${badge}</span></div>
-        <div class="row"><span class="label">Server</span><span class="stat">${multiplayer.serverName} (${multiplayer.serverId})</span></div>
-  <div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>
+        <div class="row"><span class="label">Server</span><span class="stat">${multiplayer.offlineMode ? "🔴 Offline Mode" : `${multiplayer.serverName} (${multiplayer.serverId})`}</span></div>
+  ${!multiplayer.offlineMode ? `<div class="row"><span class="label">Server Luck</span><span class="stat">x${formatNumber(multiplayer.serverLuck || 1)}</span></div>` : `<div class="row"><span class="label">Mode</span><span class="stat">Singleplayer (Local Save)</span></div>`}
         <div class="row"><span class="label">PvP Tool</span><span class="stat">${abilityLabel}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
         <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? (stealPaused ? "Steal paused" : `Stealing ${formatNumber(stealLeft)}s`) : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
         <div class="row"><span class="label">Base Lock</span><span class="stat">${ownLockLeft > 0 ? `${formatNumber(ownLockLeft)}s left` : "Ready"}</span></div>
@@ -9325,7 +9356,7 @@
       }
       saveInFlight = true;
       lastSaveAt = now;
-      if (!multiplayer.connected) {
+      if (!multiplayer.connected || multiplayer.offlineMode) {
         offlineDirty = true;
         saveInFlight = false;
         return;
@@ -9363,10 +9394,19 @@
       apiJsonAuth("/api/save", "POST", cached)
         .then(() => {
           offlineDirty = false;
-          state.info = "Offline progress synced.";
+          if (multiplayer.offlineMode) {
+            state.info = "🌐 Internet connection detected! Your offline progress has been synced. You can now join an online server to continue with your saved progress.";
+          } else {
+            state.info = "Offline progress synced.";
+          }
           updateUI();
         })
-        .catch(() => {})
+        .catch(() => {
+          if (multiplayer.offlineMode) {
+            state.info = "🌐 Internet connection detected, but sync failed. Your progress is still saved locally.";
+            updateUI();
+          }
+        })
         .finally(() => {
           offlineSyncInFlight = false;
         });
@@ -9828,6 +9868,31 @@
       requestAnimationFrame(frame);
     }
 
+    function startSingleplayerGame() {
+      state.info = "Playing in offline singleplayer mode. Progress saves locally.";
+      init();
+      const spawn = playerSpawnForSlot(multiplayer.slot);
+      player.pos.copy(spawn);
+      try {
+        const cached = JSON.parse(localStorage.getItem(OFFLINE_LOCAL_SAVE_KEY) || "null");
+        if (cached?.data) {
+          applyLoadedGameState(cached.data);
+          offlineDirty = true;
+        }
+      } catch {
+        // noop
+      }
+      state.dailyRewardMeta = {
+        ...state.dailyRewardMeta,
+        granted: false,
+        claimedToday: false
+      };
+      openDailyPanel(state.dailyRewardMeta);
+      offlineDirty = true;
+      updateUI();
+      requestAnimationFrame(frame);
+    }
+
     function initAuthFlow() {
       setAuthMode("signup");
       authTabSignupEl.addEventListener("click", () => setAuthMode("signup"));
@@ -9845,6 +9910,7 @@
         void loadServers();
       });
       serverCreateBtn.addEventListener("click", createServerFromMenu);
+      playOfflineBtn.addEventListener("click", startOfflineMode);
       serverCfgSaveBtnEl.addEventListener("click", () => { void saveServerConfigSettingsFromUi(); });
       serverRowsEl.addEventListener("click", (e) => {
         const target = e.target;
