@@ -6834,6 +6834,36 @@
     }
 
     function addExpansionPlotsForTier(id) {
+
+    function updateLocalBasePadMaterial() {
+      // Find the mesh tagged as the local base pad and apply the master skin if owned.
+      try {
+        const applyMaster = !!state.masterBaseOwned;
+        const desired = {
+          color: 0xcb3b3b,
+          emissive: 0x220000,
+          emissiveIntensity: 0.28
+        };
+        scene.traverse((node) => {
+          if (!node || !node.isMesh) return;
+          if (!node.userData || !node.userData.isLocalBase) return;
+          const mat = node.material;
+          if (!mat) return;
+          if (applyMaster) {
+            if (mat.color && mat.color.setHex) mat.color.setHex(desired.color);
+            if (mat.emissive && mat.emissive.setHex) mat.emissive.setHex(desired.emissive);
+            if (typeof mat.emissiveIntensity !== 'undefined') mat.emissiveIntensity = desired.emissiveIntensity;
+          } else {
+            // revert to default palette if needed
+            if (mat.color && mat.color.setHex) mat.color.setHex(0x8a653f);
+            if (mat.emissive && mat.emissive.setHex) mat.emissive.setHex(0x000000);
+            if (typeof mat.emissiveIntensity !== 'undefined') mat.emissiveIntensity = 0.0;
+          }
+        });
+      } catch (e) {
+        console.warn('updateLocalBasePadMaterial failed', e);
+      }
+    }
       const dx = slotOffsetX(multiplayer.slot);
       const row = Math.floor((id - 1) / 2);
       const side = id % 2 === 0 ? -1 : 1;
@@ -8644,7 +8674,12 @@
       if (!moonTab && found === total && !state.masterBaseOwned) {
         state.masterBaseOwned = true;
         state.info = "Master base skin unlocked!";
-        // UI will refresh via renderIndexPanel caller path
+        // Update the local base pad material immediately so no reload is required
+        try {
+          updateLocalBasePadMaterial();
+        } catch (e) {
+          console.warn("Could not update local base pad material immediately", e);
+        }
       }
 
       indexSummaryEl.innerHTML = `
