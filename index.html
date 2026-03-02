@@ -2572,7 +2572,9 @@
         { id: "q1", text: "Harvest 5 crops", target: 5, type: "harvest", reward: 550, done: false },
         { id: "q2", text: "Collect 8 creatures", target: 8, type: "creatures", reward: 2500, done: false },
         { id: "q3", text: "Reach $100k", target: 100000, type: "money", reward: 18000, done: false }
-      ]
+      ],
+      masterBaseOwned: false,
+      selectedBaseSkin: "default"
     };
     ensureBatState();
     state.luckyInventory.basic = 2;
@@ -5184,6 +5186,7 @@
       }
       if (typeof loaded.equippedBat === "string") state.equippedBat = normalizeBatKey(loaded.equippedBat);
       if (typeof loaded.freezeRayOwned === "boolean") state.freezeRayOwned = loaded.freezeRayOwned;
+      if (typeof loaded.masterBaseOwned === "boolean") state.masterBaseOwned = loaded.masterBaseOwned;
       if (typeof loaded.equippedCombatTool === "string") {
         state.equippedCombatTool = String(loaded.equippedCombatTool).toLowerCase() === "freezeray" ? "freezeray" : "bat";
       }
@@ -8719,6 +8722,7 @@
       if (!moonTab && found === total && !state.masterBaseOwned) {
         state.masterBaseOwned = true;
         state.selectedBaseSkin = "master";
+        settings.baseSkin = "master";
         state.info = "🎉 MASTER BASE UNLOCKED! 🎉 Check Settings to change your base skin!";
         // Update the local base pad material immediately so no reload is required
         try {
@@ -8817,8 +8821,7 @@
 
     function renderHudOnly() {
       const name = multiplayer.profile.username || playerTag(multiplayer.playerId || "local");
-      const email = multiplayer.profile.email || "";
-      const badge = `${name}${email ? ` (${email})` : ""}`;
+      const badge = name;
       const blueMoon = isBlueMoonActive();
       ensureBatState();
       const abilityLabel = currentCombatLabel();
