@@ -2584,6 +2584,7 @@
     const remoteFieldMeshes = [];
     const remoteAvatarMeshes = [];
   let localAvatarMesh = null;
+  let heldCreatureGroup = null;
     const remoteDetailMeshes = [];
     const remoteGrowingMeshes = [];
     const remoteBlockFxMeshes = [];
@@ -2719,15 +2720,12 @@
         rows.push({ icon: "🍀", value: formatClockSeconds(luckLeft), title: `Server Luck x${formatNumber(serverLuck)}` });
       }
       const moonInfo = blueMoonWindowInfo(nowSec);
+      // Only show the active Blue Moon countdown (do not show the countdown to the next Blue Moon)
       if (moonInfo.active) {
-        rows.push({ icon: "🌙", value: formatClockSeconds(moonInfo.secondsToEnd), title: "Blue Moon Active" });
-      } else {
-        rows.push({ icon: "🌙", value: formatClockSeconds(moonInfo.secondsToStart), title: "Blue Moon In" });
+        // Clamp to 10 minutes visually if desired; otherwise show remaining secondsToEnd
+        rows.push({ icon: "🌙", value: formatClockSeconds(Math.max(0, Math.floor(Number(moonInfo.secondsToEnd || 0)))), title: "Blue Moon Active" });
       }
-      const lockLeft = ownBaseLockRemainingSec();
-      if (lockLeft > 0) {
-        rows.push({ icon: "🔒", value: formatClockSeconds(lockLeft), title: "Base Lock" });
-      }
+      // Do not show Base Lock in the compact events/status timers per user request
       statusTimersEl.innerHTML = rows.map((row) => `
         <div class="statusTimerItem" title="${String(row.title || "")}">
           <span class="statusTimerIcon">${row.icon}</span>
@@ -6787,10 +6785,17 @@
 
     function buildFarm() {
       const dx = slotOffsetX(multiplayer.slot);
+      const padMat = new THREE.MeshStandardMaterial({
+        color: state.masterBaseOwned ? 0xcb3b3b : 0x8a653f,
+        emissive: state.masterBaseOwned ? 0x220000 : 0x000000,
+        emissiveIntensity: state.masterBaseOwned ? 0.28 : 0.0
+      });
       const pad = new THREE.Mesh(
         new THREE.BoxGeometry(18, 0.36, 11.8),
-        new THREE.MeshStandardMaterial({ color: 0x8a653f })
+        padMat
       );
+      // Mark this mesh as the player's local base pad so it can be updated later if needed
+      pad.userData.isLocalBase = true;
       pad.position.set(8 + dx, 0.18, -4.2);
       pad.receiveShadow = true;
       setMeshLabel(pad, "Your Base", "Farm + Barn");
@@ -7342,6 +7347,54 @@
         clearTuffTurtleModelFromCreatureGroup(g);
       }
       return g;
+    }
+
+    function clearHeldCreatureVisual() {
+      if (!heldCreatureGroup) return;
+      if (heldCreatureGroup.parent) heldCreatureGroup.parent.remove(heldCreatureGroup);
+      heldCreatureGroup = null;
+    }
+
+    function updateHeldCreatureVisual() {
+      // Visualize currently carried creature (state.carriedSteal)
+      try {
+        const carry = normalizeCarriedPayload(state.carriedSteal || {});
+        if (!carry || carry.itemType !== "creature" || !carry.creature) {
+          clearHeldCreatureVisual();
+          return;
+        }
+        const creature = carry.creature;
+        // Create mesh if not present or mismatched
+        if (!heldCreatureGroup) {
+          heldCreatureGroup = createCreatureMesh(creature.rankKey || "basic", creature.name || "Creature");
+          heldCreatureGroup.scale.setScalar(0.64);
+        }
+        // Decide parent and transform depending on camera mode
+        const wantAvatarParent = settings.cameraMode === "third-back" && localAvatarMesh;
+        const currentParent = heldCreatureGroup.parent || null;
+        if (wantAvatarParent) {
+          if (currentParent !== localAvatarMesh) {
+            if (currentParent) currentParent.remove(heldCreatureGroup);
+            localAvatarMesh.add(heldCreatureGroup);
+          }
+          // small offset in front of the avatar's chest/hand
+          heldCreatureGroup.position.set(0.28, 0.9, 0.42);
+          heldCreatureGroup.rotation.set(0, 0, 0);
+        } else {
+          // attach to camera for first-person view
+          if (currentParent !== camera) {
+            if (currentParent) currentParent.remove(heldCreatureGroup);
+            camera.add(heldCreatureGroup);
+          }
+          // position slightly down-and-forward from the camera
+          heldCreatureGroup.position.set(0.45, -0.25, -0.9);
+          heldCreatureGroup.rotation.set(-0.25, 0, 0);
+        }
+        heldCreatureGroup.visible = true;
+      } catch (e) {
+        console.warn("updateHeldCreatureVisual error", e);
+        clearHeldCreatureVisual();
+      }
     }
 
     function makeSymbolSprite(symbol, color = "#ffffff", glow = "rgba(255,255,255,0.35)", size = 160) {
@@ -8587,9 +8640,16 @@
       const found = INDEX_ENTRIES.reduce((sum, entry) => sum + (seenMap[entry.name] ? 1 : 0), 0);
       const total = INDEX_ENTRIES.length;
       const pct = total > 0 ? Math.floor((found / total) * 100) : 0;
+      // If not the Blue Moon tab and the index is completed, reward the master base skin.
+      if (!moonTab && found === total && !state.masterBaseOwned) {
+        state.masterBaseOwned = true;
+        state.info = "Master base skin unlocked!";
+        // UI will refresh via renderIndexPanel caller path
+      }
+
       indexSummaryEl.innerHTML = `
         <div><b>${moonTab ? "Blue Moon Index" : "Creature Index"}</b>: ${found}/${total} (${pct}%)</div>
-        <div style="margin-top:4px;color:#b9d8ef">Completion rewards are planned for a future update.</div>
+        <div style="margin-top:4px;color:#b9d8ef">${moonTab ? "(blue moon base coming soon)" : "Completion rewards are available."}</div>
       `;
       indexListEl.innerHTML = INDEX_ENTRIES.map((entry) => {
         const seen = !!seenMap[entry.name];
@@ -9159,6 +9219,8 @@
           localAvatarMesh.rotation.y = player.yaw;
         }
       }
+      // update held creature visual (attached to camera or avatar)
+      updateHeldCreatureVisual();
       renderHudOnly();
       renderStatusTimers();
       if (state.shopOpen) {
