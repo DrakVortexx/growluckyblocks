@@ -814,53 +814,6 @@
       cursor: pointer;
     }
 
-    #adminPanel {
-      right: 12px;
-      top: 78px;
-      width: min(320px, calc(100vw - 24px));
-      padding: 10px;
-      display: none;
-      z-index: 54;
-      background: rgba(10, 14, 30, 0.9);
-    }
-
-    #adminPanel.open { display: block; }
-
-    #adminPanel h3 {
-      margin: 0 0 8px;
-      color: #d8e5ff;
-      font-size: 14px;
-    }
-
-    #adminPanel input {
-      width: 100%;
-      border: 1px solid rgba(255,255,255,0.22);
-      background: rgba(7, 14, 24, 0.84);
-      color: #f2f8ff;
-      border-radius: 7px;
-      padding: 8px 9px;
-      margin-bottom: 7px;
-      outline: none;
-    }
-
-    #adminRun {
-      width: 100%;
-      border: 1px solid rgba(255,255,255,0.25);
-      background: linear-gradient(180deg, #9ca8ff, #5d68d3);
-      color: #fff;
-      border-radius: 7px;
-      padding: 8px 10px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-
-    #adminMsg {
-      margin-top: 7px;
-      min-height: 16px;
-      font-size: 12px;
-      color: #c5d4ff;
-    }
-
     #settingsPanel {
       right: 12px;
       top: 78px;
@@ -1602,7 +1555,6 @@
       #inventory,
       #cosmeticsPanel,
       #chatPanel,
-      #adminPanel,
       #settingsPanel,
       #indexPanel {
         left: 50%;
@@ -1613,7 +1565,6 @@
         bottom: 10px;
       }
       #chatPanel { height: min(50vh, 360px); }
-      #adminPanel,
       #settingsPanel,
       #indexPanel { max-height: 52vh; overflow: auto; }
       #shop {
@@ -1691,7 +1642,6 @@
       #inventory,
       #cosmeticsPanel,
       #chatPanel,
-      #adminPanel,
       #settingsPanel,
       #indexPanel {
         width: calc(100vw - 14px);
@@ -1853,51 +1803,6 @@
       <input id="chatInput" maxlength="220" placeholder="Say something..." />
       <button id="chatSend" type="submit">Send</button>
     </form>
-  </div>
-  <div id="adminPanel" class="panel">
-    <h3>Admin Panel</h3>
-    <div style="font-size:12px;color:#c5d4ff;margin-bottom:8px">Run server controls without typing console commands.</div>
-    <div style="display:grid;gap:6px">
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
-        <input id="adminLuckAmount" type="number" min="1" step="1" value="100" placeholder="Luck amount" />
-        <select id="adminLuckScope"><option value="server">server</option><option value="global">global</option></select>
-        <button id="adminLuckRun">Set Luck</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
-        <input id="adminEventSeconds" type="number" min="10" step="1" value="600" placeholder="Blue Moon seconds" />
-        <select id="adminEventScope"><option value="server">server</option><option value="global">global</option></select>
-        <button id="adminEventRun">Blue Moon</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:6px">
-        <input id="adminGiveUser" maxlength="24" placeholder="Player username" />
-        <input id="adminGiveRank" placeholder="Rarity or valentinesblock" />
-        <input id="adminGiveAmount" type="number" min="1" step="1" value="1" placeholder="Amount" />
-        <input id="adminGiveMutation" placeholder="Mutation (optional)" />
-        <button id="adminGiveRun">Give Block</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px">
-        <input id="adminDustUser" maxlength="24" placeholder="Player username" />
-        <input id="adminDustAmount" type="number" min="1" step="1" value="100" placeholder="Stardust amount" />
-        <button id="adminDustRun">Give Stardust</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px">
-        <input id="adminSpawnCreature" placeholder="Creature name" />
-        <select id="adminSpawnScope"><option value="server">server</option><option value="global">global</option></select>
-        <input id="adminSpawnAmount" type="number" min="1" max="100" step="1" value="1" placeholder="Amount" />
-        <button id="adminSpawnRun">Spawn</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px">
-        <input id="adminResetUser" maxlength="24" placeholder="Reset username" />
-        <button id="adminResetRun">Reset</button>
-        <input id="adminTutorialUser" maxlength="24" placeholder="Tutorial reset username" />
-        <button id="adminTutorialRun">Tutorial Reset</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
-        <input id="adminBroadcastText" maxlength="160" placeholder="Broadcast message" />
-        <button id="adminBroadcastRun">Broadcast</button>
-      </div>
-    </div>
-    <div id="adminMsg"></div>
   </div>
   <div id="settingsPanel" class="panel">
     <h3>Settings</h3>
@@ -2199,32 +2104,6 @@
     const chatMessagesEl = document.getElementById("chatMessages");
     const chatFormEl = document.getElementById("chatForm");
     const chatInputEl = document.getElementById("chatInput");
-    const adminPanelEl = document.getElementById("adminPanel");
-    const adminLuckAmountEl = document.getElementById("adminLuckAmount");
-    const adminLuckScopeEl = document.getElementById("adminLuckScope");
-    const adminLuckRunEl = document.getElementById("adminLuckRun");
-    const adminEventSecondsEl = document.getElementById("adminEventSeconds");
-    const adminEventScopeEl = document.getElementById("adminEventScope");
-    const adminEventRunEl = document.getElementById("adminEventRun");
-    const adminGiveUserEl = document.getElementById("adminGiveUser");
-    const adminGiveRankEl = document.getElementById("adminGiveRank");
-    const adminGiveAmountEl = document.getElementById("adminGiveAmount");
-    const adminGiveMutationEl = document.getElementById("adminGiveMutation");
-    const adminGiveRunEl = document.getElementById("adminGiveRun");
-    const adminDustUserEl = document.getElementById("adminDustUser");
-    const adminDustAmountEl = document.getElementById("adminDustAmount");
-    const adminDustRunEl = document.getElementById("adminDustRun");
-    const adminSpawnCreatureEl = document.getElementById("adminSpawnCreature");
-    const adminSpawnScopeEl = document.getElementById("adminSpawnScope");
-    const adminSpawnAmountEl = document.getElementById("adminSpawnAmount");
-    const adminSpawnRunEl = document.getElementById("adminSpawnRun");
-    const adminResetUserEl = document.getElementById("adminResetUser");
-    const adminResetRunEl = document.getElementById("adminResetRun");
-    const adminTutorialUserEl = document.getElementById("adminTutorialUser");
-    const adminTutorialRunEl = document.getElementById("adminTutorialRun");
-    const adminBroadcastTextEl = document.getElementById("adminBroadcastText");
-    const adminBroadcastRunEl = document.getElementById("adminBroadcastRun");
-    const adminMsgEl = document.getElementById("adminMsg");
     const settingsPanelEl = document.getElementById("settingsPanel");
     const settingsDeviceEl = document.getElementById("settingsDevice");
     const settingsLookEl = document.getElementById("settingsLook");
@@ -3934,7 +3813,6 @@
       if (open) {
         indexPanelEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
-        adminPanelEl.classList.remove("open");
         closeRebirthPanel();
         closeDailyPanel();
         document.exitPointerLock();
@@ -3951,7 +3829,6 @@
         || cosmeticsPanelEl.classList.contains("open")
         || indexPanelEl.classList.contains("open")
         || chatPanelEl.classList.contains("open")
-        || adminPanelEl.classList.contains("open")
         || settingsPanelEl.classList.contains("open")
         || sellCreatureModalEl.style.display !== "none"
         || rebirthPanelEl.style.display !== "none"
@@ -4711,7 +4588,6 @@
       chatPanelEl.classList.toggle("open", open);
       if (open) {
         indexPanelEl.classList.remove("open");
-        adminPanelEl.classList.remove("open");
         settingsPanelEl.classList.remove("open");
         closeRebirthPanel();
         closeDailyPanel();
@@ -4719,16 +4595,11 @@
       }
     }
 
-    function setAdminMessage(msg, good = false) {
-      adminMsgEl.textContent = msg || "";
-      adminMsgEl.style.color = good ? "#9dffc7" : "#ffc8c8";
-    }
-
     async function runAdminCommand(commandText = "") {
       if (!multiplayer.isAdmin) return;
       const cmd = String(commandText || "").trim();
       if (!cmd) {
-        setAdminMessage("Enter a command.");
+        state.info = "Enter a command.";
         return;
       }
       const parts = cmd.split(/\s+/);
@@ -4736,7 +4607,7 @@
       try {
         const token = await getAuthToken();
         if (!token) {
-          setAdminMessage("No auth token.");
+          state.info = "No auth token.";
           return;
         }
         if (head === "luck") {
@@ -4744,17 +4615,17 @@
           const scopeRaw = String(parts[2] || "server").toLowerCase();
           const scope = scopeRaw === "global" ? "global" : "server";
           if (!Number.isFinite(amount) || amount < 1) {
-            setAdminMessage("Usage: luck <amount> server|global");
+            state.info = "Usage: luck <amount> server|global";
             return;
           }
           const data = await apiJson("/api/admin/luck", "POST", { amount, serverId: multiplayer.serverId, scope }, token);
           multiplayer.serverLuck = Math.max(1, Number(data.serverLuck || multiplayer.serverLuck || 1));
           multiplayer.serverLuckUntil = Number(data.serverLuckUntil || multiplayer.serverLuckUntil || 0);
           if (data.scope === "global") {
-            setAdminMessage(`Global luck set to x${multiplayer.serverLuck} across ${Number(data.affectedServers || 0)} server(s).`, true);
+            state.info = `Global luck set to x${multiplayer.serverLuck} across ${Number(data.affectedServers || 0)} server(s).`;
             state.info = `Admin command: global server luck x${multiplayer.serverLuck}`;
           } else {
-            setAdminMessage(`Server luck set to x${multiplayer.serverLuck}.`, true);
+            state.info = `Server luck set to x${multiplayer.serverLuck}.`;
             state.info = `Admin command: server luck x${multiplayer.serverLuck}`;
           }
           updateUI();
@@ -4765,7 +4636,7 @@
           const arg3 = String(parts[2] || "").trim().toLowerCase();
           const arg4 = String(parts[3] || "").trim().toLowerCase();
           if (!eventName) {
-            setAdminMessage("Usage: event bluemoon [server|global] [seconds]");
+            state.info = "Usage: event bluemoon [server|global] [seconds]";
             return;
           }
           const scope = arg3 === "global" || arg4 === "global"
@@ -4782,7 +4653,7 @@
           }, token);
           multiplayer.forcedBlueMoonUntil = Number(data.forcedBlueMoonUntil || multiplayer.forcedBlueMoonUntil || 0);
           multiplayer.forcedBlueMoonEventId = String(data.forcedBlueMoonEventId || multiplayer.forcedBlueMoonEventId || "");
-          setAdminMessage(`Blue Moon triggered (${scope}) for ${formatDuration(durationSec)}.`, true);
+          state.info = `Blue Moon triggered (${scope}) for ${formatDuration(durationSec)}.`;
           state.info = `Admin command: Blue Moon started (${scope})`;
           updateUI();
           return;
@@ -4792,7 +4663,7 @@
             const username = String(parts[2] || "").trim();
             const amount = Math.max(1, Math.floor(Number(parts[3] || 0)));
             if (!username || !Number.isFinite(amount) || amount < 1) {
-              setAdminMessage("Usage: give stardust <username> <amount>");
+              state.info = "Usage: give stardust <username> <amount>";
               return;
             }
             const data = await apiJson("/api/admin/give", "POST", {
@@ -4801,7 +4672,7 @@
               resource: "stardust",
               amount
             }, token);
-            setAdminMessage(`Gave 💫 ${formatNumber(Number(data.amount || amount))} Stardust to ${username}.`, true);
+            state.info = `Gave 💫 ${formatNumber(Number(data.amount || amount))} Stardust to ${username}.`;
             state.info = `Admin command: gave 💫 ${formatNumber(Number(data.amount || amount))} Stardust to ${username}`;
             if (String(data.targetPlayerId || "") === String(multiplayer.playerId || "")) {
               state.stardust = Math.max(0, Number(data.stardust || state.stardust || 0));
@@ -4823,7 +4694,7 @@
             if (Number.isFinite(Number(a4)) && Number(a4) >= 1) amount = Math.floor(Number(a4));
           }
           if (!username || !blockKey || !Number.isFinite(amount) || amount < 1) {
-            setAdminMessage("Usage: give <username> <rarity|valentinesblock> <amount> [mutation]");
+            state.info = "Usage: give <username> <rarity|valentinesblock> <amount> [mutation]";
             return;
           }
           const data = await apiJson("/api/admin/give", "POST", {
@@ -4841,13 +4712,13 @@
             updateUI();
           }
           const grantedMeta = blockMetaByKey(grantedKey);
-          setAdminMessage(`Gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`} block(s) to ${username}.`, true);
+          state.info = `Gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`} block(s) to ${username}.`;
           state.info = `Admin command: gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`} block(s) to ${username}`;
           return;
         }
         if (head === "spawn") {
           if (parts.length < 3) {
-            setAdminMessage("Usage: spawn <creature|adminblock|godlyblock> server|global [amount]");
+            state.info = "Usage: spawn <creature|adminblock|godlyblock> server|global [amount]";
             return;
           }
           const lastPart = String(parts[parts.length - 1] || "").toLowerCase();
@@ -4871,7 +4742,7 @@
             }
             
             if (!Number.isFinite(amount) || amount < 1) {
-              setAdminMessage("Usage: spawn <adminblock|godlyblock> server|global [amount]");
+              state.info = "Usage: spawn <adminblock|godlyblock> server|global [amount]";
               return;
             }
             
@@ -4884,7 +4755,7 @@
             }, token);
             
             const blockLabel = blockType === "adminblock" ? "Admin" : "Godly";
-            setAdminMessage(`Spawned ${formatNumber(Number(data?.spawned || 0))} ${blockLabel} Block(s) (${scope}).`, true);
+            state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${blockLabel} Block(s) (${scope}).`;
             state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${blockLabel} Block(s) (${scope})`;
             return;
           }
@@ -4902,7 +4773,7 @@
           }
           
           if (!creatureName || !Number.isFinite(amount) || amount < 1) {
-            setAdminMessage("Usage: spawn <creature|adminblock|godlyblock> server|global [amount]");
+            state.info = "Usage: spawn <creature|adminblock|godlyblock> server|global [amount]";
             return;
           }
           
@@ -4914,18 +4785,18 @@
           }, token);
           
           const creatureLabel = String(data?.creature?.name || creatureName);
-          setAdminMessage(`Spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope}).`, true);
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope}).`;
           state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope})`;
           return;
         }
         if (head === "reset") {
           const username = String(parts[1] || "").trim();
           if (!username) {
-            setAdminMessage("Usage: reset <username>");
+            state.info = "Usage: reset <username>";
             return;
           }
           await apiJson("/api/admin/reset", "POST", { username }, token);
-          setAdminMessage(`Reset ${username}.`, true);
+          state.info = `Reset ${username}.`;
           state.info = `Admin command: reset ${username}`;
           return;
         }
@@ -4933,47 +4804,33 @@
           const action = String(parts[1] || "").trim().toLowerCase();
           const username = String(parts[2] || "").trim();
           if (action !== "reset" || !username) {
-            setAdminMessage("Usage: tutorial reset <username>");
+            state.info = "Usage: tutorial reset <username>";
             return;
           }
           await apiJson("/api/admin/tutorial/reset", "POST", { username }, token);
-          setAdminMessage(`Tutorial reset for ${username}.`, true);
+          state.info = `Tutorial reset for ${username}.`;
           state.info = `Admin command: tutorial reset ${username}`;
           return;
         }
         if (head === "broadcast") {
           const text = cmd.slice(parts[0].length).trim();
           if (!text) {
-            setAdminMessage("Usage: broadcast <message>");
+            state.info = "Usage: broadcast <message>";
             return;
           }
           await apiJson("/api/admin/broadcast", "POST", { text }, token);
-          setAdminMessage("Broadcast sent globally.", true);
+          state.info = "Admin command: broadcast sent globally";
           showBroadcast(`[ADMIN] ${text}`, 12);
           return;
         }
-        setAdminMessage("Unknown command. Use: luck, event, give, spawn, reset, tutorial, or broadcast");
+        state.info = "Unknown command. Use: luck, event, give, spawn, reset, tutorial, or broadcast";
       } catch {
-        setAdminMessage("Command failed.");
+        state.info = "Command failed.";
       }
     }
 
-    function toggleAdminPanel(force = null) {
-      if (!multiplayer.isAdmin) return;
-      const open = force === null ? !adminPanelEl.classList.contains("open") : !!force;
-      adminPanelEl.classList.toggle("open", open);
-      if (open) {
-        indexPanelEl.classList.remove("open");
-        chatPanelEl.classList.remove("open");
-        settingsPanelEl.classList.remove("open");
-        closeRebirthPanel();
-        closeDailyPanel();
-      }
-    }
-
-    function setAuthMessage(msg, good = false) {
-      authMessageEl.textContent = msg || "";
-      authMessageEl.style.color = good ? "#9dffc7" : "#ffd7d7";
+    function resetJoystickVisual() {
+      joystickStickEl.style.transform = "translate(0px, 0px)";
     }
 
     function setAuthMode(mode) {
@@ -8945,7 +8802,7 @@
       dockSettingsBtn.classList.toggle("active", settingsPanelEl.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
       dockChatBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
-      dockAdminBtn.classList.toggle("active", adminPanelEl.classList.contains("open"));
+      dockAdminBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
       const invSig = inventoryRenderSignature();
       if (invSig !== lastInventoryRenderSig) {
         renderInventory();
@@ -9072,7 +8929,7 @@
       });
       dockAdminBtn.addEventListener("click", () => {
         toggleGuide(false);
-        toggleAdminPanel();
+        toggleChat();
       });
       dockLogoutBtn.addEventListener("click", async () => {
         try {
@@ -9129,7 +8986,7 @@
         const amount = Math.max(1, Math.floor(Number(adminGiveAmountEl?.value || 1)));
         const mutation = String(adminGiveMutationEl?.value || "").trim().toLowerCase();
         if (!username || !rank) {
-          setAdminMessage("Enter player and rarity for Give Block.");
+          state.info = "Enter player and rarity for Give Block.";
           return;
         }
         const cmd = mutation ? `give ${username} ${rank} ${amount} ${mutation}` : `give ${username} ${rank} ${amount}`;
@@ -9139,7 +8996,7 @@
         const username = String(adminDustUserEl?.value || "").trim();
         const amount = Math.max(1, Math.floor(Number(adminDustAmountEl?.value || 1)));
         if (!username) {
-          setAdminMessage("Enter player for Give Stardust.");
+          state.info = "Enter player for Give Stardust.";
           return;
         }
         void runAdminCommand(`give stardust ${username} ${amount}`);
@@ -9149,7 +9006,7 @@
         const scope = String(adminSpawnScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
         const amount = Math.max(1, Math.floor(Number(adminSpawnAmountEl?.value || 1)));
         if (!creature) {
-          setAdminMessage("Enter creature name for Spawn.");
+          state.info = "Enter creature name for Spawn.";
           return;
         }
         void runAdminCommand(`spawn ${creature} ${scope} ${amount}`);
@@ -9157,7 +9014,7 @@
       adminResetRunEl?.addEventListener("click", () => {
         const username = String(adminResetUserEl?.value || "").trim();
         if (!username) {
-          setAdminMessage("Enter player for Reset.");
+          state.info = "Enter player for Reset.";
           return;
         }
         void runAdminCommand(`reset ${username}`);
@@ -9165,7 +9022,7 @@
       adminTutorialRunEl?.addEventListener("click", () => {
         const username = String(adminTutorialUserEl?.value || "").trim();
         if (!username) {
-          setAdminMessage("Enter player for Tutorial Reset.");
+          state.info = "Enter player for Tutorial Reset.";
           return;
         }
         void runAdminCommand(`tutorial reset ${username}`);
@@ -9173,7 +9030,7 @@
       adminBroadcastRunEl?.addEventListener("click", () => {
         const text = String(adminBroadcastTextEl?.value || "").trim();
         if (!text) {
-          setAdminMessage("Enter message for Broadcast.");
+          state.info = "Enter message for Broadcast.";
           return;
         }
         void runAdminCommand(`broadcast ${text}`);
