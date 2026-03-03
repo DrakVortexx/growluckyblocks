@@ -4836,7 +4836,19 @@
       authTabLoginEl.classList.toggle("active", !signup);
       authUsernameEl.style.display = signup ? "block" : "none";
       authSubmitEl.textContent = signup ? "Create Account" : "Log In";
-      setAuthMode("");
+      setAuthMessage("");
+    }
+
+    function setAuthMessage(message, loading = false) {
+      if (authMessageEl) {
+        authMessageEl.textContent = message;
+        authMessageEl.style.display = message ? "block" : "none";
+        if (loading) {
+          authMessageEl.style.opacity = "0.7";
+        } else {
+          authMessageEl.style.opacity = "1";
+        }
+      }
     }
 
     async function getAuthToken(forceRefresh = false) {
