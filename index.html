@@ -4836,7 +4836,7 @@
       authTabLoginEl.classList.toggle("active", !signup);
       authUsernameEl.style.display = signup ? "block" : "none";
       authSubmitEl.textContent = signup ? "Create Account" : "Log In";
-      setAuthMessage("");
+      setAuthMode("");
     }
 
     async function getAuthToken(forceRefresh = false) {
