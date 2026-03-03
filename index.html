@@ -3833,7 +3833,8 @@
     }
 
     function toggleSettingsPanel(force = null) {
-      const open = force === null ? !settingsPanelEl.classList.contains("open") : !!force;
+      if (!settingsPanelEl) return;
+      const open = force === null ? !settingsPanelEl?.classList.contains("open") : !!force;
       settingsPanelEl.classList.toggle("open", open);
       if (open) {
         indexPanelEl.classList.remove("open");
@@ -3851,10 +3852,10 @@
     function gameplayUiOpen() {
       return state.shopOpen
         || state.inventoryOpen
-        || cosmeticsPanelEl.classList.contains("open")
-        || indexPanelEl.classList.contains("open")
-        || chatPanelEl.classList.contains("open")
-        || settingsPanelEl.classList.contains("open")
+        || cosmeticsPanelEl?.classList.contains("open")
+        || indexPanelEl?.classList.contains("open")
+        || chatPanelEl?.classList.contains("open")
+        || settingsPanelEl?.classList.contains("open")
         || sellCreatureModalEl.style.display !== "none"
         || rebirthPanelEl.style.display !== "none"
         || wheelPanelEl.style.display !== "none"
@@ -4609,7 +4610,8 @@
     }
 
     function toggleChat(force = null) {
-      const open = force === null ? !chatPanelEl.classList.contains("open") : !!force;
+      if (!chatPanelEl) return;
+      const open = force === null ? !chatPanelEl?.classList.contains("open") : !!force;
       chatPanelEl.classList.toggle("open", open);
       if (open) {
         indexPanelEl.classList.remove("open");
@@ -8247,7 +8249,8 @@
     }
 
     function toggleCosmeticsPanel(force = null) {
-      const open = force === null ? !cosmeticsPanelEl.classList.contains("open") : !!force;
+      if (!cosmeticsPanelEl) return;
+      const open = force === null ? !cosmeticsPanelEl?.classList.contains("open") : !!force;
       cosmeticsPanelEl.classList.toggle("open", open);
       if (open) {
         toggleGuide(false);
@@ -8255,7 +8258,7 @@
         toggleInventory(false);
         indexPanelEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
-        adminPanelEl.classList.remove("open");
+        adminPanelEl?.classList.remove("open");
         settingsPanelEl.classList.remove("open");
         closeWheelPanel();
         closeRebirthPanel();
@@ -8676,7 +8679,7 @@
     }
 
     function renderIndexPanel() {
-      if (!indexPanelEl.classList.contains("open")) return;
+      if (!indexPanelEl?.classList.contains("open")) return;
       const moonTab = state.indexTab === "bluemoon";
       indexTabCreaturesEl.classList.toggle("active", !moonTab);
       indexTabBlueMoonEl.classList.toggle("active", moonTab);
@@ -8715,13 +8718,13 @@
     }
 
     function toggleIndexPanel(force = null) {
-      const open = force === null ? !indexPanelEl.classList.contains("open") : !!force;
+      const open = force === null ? !indexPanelEl?.classList.contains("open") : !!force;
       indexPanelEl.classList.toggle("open", open);
       if (open) {
         state.inventoryOpen = false;
         inventoryEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
-        adminPanelEl.classList.remove("open");
+        adminPanelEl?.classList.remove("open");
         settingsPanelEl.classList.remove("open");
         closeRebirthPanel();
         closeWheelPanel();
@@ -8830,12 +8833,12 @@
       renderStatusTimers();
       dockShopBtn.classList.toggle("active", !!state.shopOpen);
       dockRebirthBtn.classList.toggle("active", rebirthPanelEl.style.display !== "none");
-      dockIndexBtn.classList.toggle("active", indexPanelEl.classList.contains("open"));
-      dockCosmeticsBtn.classList.toggle("active", cosmeticsPanelEl.classList.contains("open"));
-      dockSettingsBtn.classList.toggle("active", settingsPanelEl.classList.contains("open"));
+      dockIndexBtn.classList.toggle("active", indexPanelEl?.classList.contains("open"));
+      dockCosmeticsBtn.classList.toggle("active", cosmeticsPanelEl?.classList.contains("open"));
+      dockSettingsBtn.classList.toggle("active", settingsPanelEl?.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
-      dockChatBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
-      dockAdminBtn.classList.toggle("active", chatPanelEl.classList.contains("open"));
+      dockChatBtn.classList.toggle("active", chatPanelEl?.classList.contains("open"));
+      dockAdminBtn.classList.toggle("active", chatPanelEl?.classList.contains("open"));
       const invSig = inventoryRenderSignature();
       if (invSig !== lastInventoryRenderSig) {
         renderInventory();
@@ -8859,7 +8862,7 @@
 
         keys.add(e.code);
 
-        if (e.code === "Escape" && (state.shopOpen || state.inventoryOpen || cosmeticsPanelEl.classList.contains("open"))) {
+        if (e.code === "Escape" && (state.shopOpen || state.inventoryOpen || cosmeticsPanelEl?.classList.contains("open"))) {
           toggleShop(false);
           toggleInventory(false);
           toggleCosmeticsPanel(false);
@@ -8882,15 +8885,15 @@
           closeRebirthPanel();
           return;
         }
-        if (e.code === "Escape" && settingsPanelEl.classList.contains("open")) {
+        if (e.code === "Escape" && settingsPanelEl?.classList.contains("open")) {
           toggleSettingsPanel(false);
           return;
         }
-        if (e.code === "Escape" && indexPanelEl.classList.contains("open")) {
+        if (e.code === "Escape" && indexPanelEl?.classList.contains("open")) {
           toggleIndexPanel(false);
           return;
         }
-        if (e.code === "Escape" && cosmeticsPanelEl.classList.contains("open")) {
+        if (e.code === "Escape" && cosmeticsPanelEl?.classList.contains("open")) {
           toggleCosmeticsPanel(false);
           return;
         }
@@ -8917,11 +8920,11 @@
         if (!mobileInput.enabled
           && !state.shopOpen
           && !state.inventoryOpen
-          && !indexPanelEl.classList.contains("open")
-          && !chatPanelEl.classList.contains("open")
-          && !adminPanelEl.classList.contains("open")
-          && !settingsPanelEl.classList.contains("open")
-          && !cosmeticsPanelEl.classList.contains("open")
+          && !indexPanelEl?.classList.contains("open")
+          && !chatPanelEl?.classList.contains("open")
+          && !adminPanelEl?.classList.contains("open")
+          && !settingsPanelEl?.classList.contains("open")
+          && !cosmeticsPanelEl?.classList.contains("open")
           && sellCreatureModalEl.style.display === "none"
           && rebirthPanelEl.style.display === "none"
           && wheelPanelEl.style.display === "none"
@@ -9178,9 +9181,9 @@
         if (!player.pointerLocked
           || state.shopOpen
           || state.inventoryOpen
-          || chatPanelEl.classList.contains("open")
-          || adminPanelEl.classList.contains("open")
-          || settingsPanelEl.classList.contains("open")
+          || chatPanelEl?.classList.contains("open")
+          || adminPanelEl?.classList.contains("open")
+          || settingsPanelEl?.classList.contains("open")
           || wheelPanelEl.style.display !== "none") return;
         applyLookDelta(e.movementX, e.movementY, 1);
       });
@@ -9764,7 +9767,7 @@
           multiplayer.profile.email = String(joined.profile.email || multiplayer.profile.email || "");
         }
         if (typeof joined.isAdmin === "boolean") multiplayer.isAdmin = joined.isAdmin;
-        if (!multiplayer.isAdmin) adminPanelEl.classList.remove("open");
+        if (!multiplayer.isAdmin) adminPanelEl?.classList.remove("open");
         multiplayer.connected = true;
         init();
         const spawn = playerSpawnForSlot(multiplayer.slot);
@@ -9975,7 +9978,7 @@
         remoteDetailSignature = "";
         clearRemoteDetailMeshes();
         renderChat();
-        adminPanelEl.classList.remove("open");
+        adminPanelEl?.classList.remove("open");
         chatPanelEl.classList.remove("open");
         closeServerConfigPanel();
         serverGateEl.classList.remove("show");
