@@ -1847,6 +1847,13 @@
   <div id="adminPanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:88;min-width:450px;max-width:min(94vw,600px);padding:14px;">
     <h3 style="margin:0 0 6px">Admin Panel</h3>
     <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Console</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <input id="adminConsoleInput" type="text" placeholder="Type command (luck, give, spawn, reset, tutorial, event, broadcast...)" style="flex:1;padding:6px" />
+        <button id="adminConsoleRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Run</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
       <h4 style="margin:0 0 4px;color:#ff9f57">Server Luck</h4>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <input id="adminLuckAmount" type="number" min="0" placeholder="Amount" style="flex:1;padding:4px">
@@ -2220,6 +2227,8 @@
     const mBtnChatEl = document.getElementById("mBtnChat");
     const mobileInvFabEl = document.getElementById("mobileInvFab");
     const adminPanelEl = document.getElementById("adminPanel");
+    const adminConsoleInputEl = document.getElementById("adminConsoleInput");
+    const adminConsoleRunEl = document.getElementById("adminConsoleRun");
     const adminLuckRunEl = document.getElementById("adminLuckRun");
     const adminLuckAmountEl = document.getElementById("adminLuckAmount");
     const adminLuckScopeEl = document.getElementById("adminLuckScope");
@@ -4423,6 +4432,8 @@
       serverConfigTitleEl.textContent = "Private Server Config";
       serverWhitelistListEl.innerHTML = "";
       serverWhitelistInputEl.value = "";
+      serverCfgDescriptionEl.value = "";
+      serverCfgAllowOthersLuckEl.checked = true;
       setServerConfigMessage("");
     }
 
@@ -4450,9 +4461,9 @@
         const data = await apiJsonAuth(`/api/servers/config?serverId=${encodeURIComponent(serverConfigServerId)}&playerId=${encodeURIComponent(multiplayer.playerId)}`);
         renderServerWhitelist(data?.whitelist || []);
         const settings = data?.settings && typeof data.settings === "object" ? data.settings : {};
-        serverCfgAllowStealEl.checked = settings.allowStealing !== false;
-        serverCfgAllowPvpEl.checked = settings.allowPvp !== false;
-        setServerConfigMessage("Invite usernames to whitelist this private server.", true);
+        serverCfgDescriptionEl.value = String(settings.description || "");
+        serverCfgAllowOthersLuckEl.checked = settings.allowOthersServerLuck !== false;
+        setServerConfigMessage("Set description, choose who can buy server luck, and manage whitelist.", true);
       } catch (err) {
         setServerConfigMessage(String(err?.payload?.error || err?.message || "Could not load server config."));
       }
@@ -4467,13 +4478,9 @@
         const data = await apiJsonAuth("/api/servers/config/settings", "POST", {
           playerId: multiplayer.playerId,
           serverId: serverConfigServerId,
-          allowStealing: !!serverCfgAllowStealEl.checked,
-          allowPvp: !!serverCfgAllowPvpEl.checked
+          description: String(serverCfgDescriptionEl.value || "").trim().slice(0, 180),
+          allowOthersServerLuck: !!serverCfgAllowOthersLuckEl.checked
         });
-        if (data?.server && String(data.server.id || "") === String(multiplayer.serverId || "")) {
-          multiplayer.allowStealing = data.server.allowStealing !== false;
-          multiplayer.allowPvp = data.server.allowPvp !== false;
-        }
         if (Array.isArray(data?.servers)) renderServerRows(data.servers);
         setServerConfigMessage("Settings saved.", true);
       } catch (err) {
@@ -4545,6 +4552,7 @@
             <div>
               <div style="font-weight:800">${String(s.name || "Server")}${owner}</div>
               <div class="serverMeta">${tag} | Players: ${Number(s.playerCount || 0)}/${maxPlayers} | Owner: ${ownerName} | Luck: x${Number(s.luck || 1)}${s.isPrivate ? ` | Whitelist: ${Number(s.whitelistCount || 0)}` : ""}</div>
+              ${String(s.description || "").trim() ? `<div style="font-size:12px;color:#b9d9ee;margin-top:2px">${String(s.description || "")}</div>` : ""}
               <div style="font-size:12px;color:#cbe2f4">${String(s.id || "")}</div>
             </div>
             <div class="serverActions">
@@ -4699,8 +4707,10 @@
 
     function toggleAdminPanel(force = null) {
       if (!adminPanelEl) return;
-      const open = force === null ? !adminPanelEl?.classList.contains("open") : !!force;
+      const isOpen = adminPanelEl.classList.contains("open");
+      const open = force === null ? !isOpen : !!force;
       adminPanelEl.classList.toggle("open", open);
+      adminPanelEl.style.display = open ? "block" : "none";
       if (open) {
         toggleGuide(false);
         toggleChat(false);
@@ -4710,6 +4720,7 @@
         toggleShop(false);
         toggleInventory(false);
         document.exitPointerLock();
+        adminConsoleInputEl?.focus();
       }
     }
 
@@ -8362,7 +8373,7 @@
         toggleInventory(false);
         indexPanelEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
-        adminPanelEl?.classList.remove("open");
+        toggleAdminPanel(false);
         settingsPanelEl.classList.remove("open");
         closeWheelPanel();
         closeRebirthPanel();
@@ -8828,7 +8839,7 @@
         state.inventoryOpen = false;
         inventoryEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
-        adminPanelEl?.classList.remove("open");
+        toggleAdminPanel(false);
         settingsPanelEl.classList.remove("open");
         closeRebirthPanel();
         closeWheelPanel();
@@ -9174,6 +9185,20 @@
           return;
         }
         void runAdminCommand(`broadcast ${text}`);
+      });
+      adminConsoleRunEl?.addEventListener("click", () => {
+        const text = String(adminConsoleInputEl?.value || "").trim();
+        if (!text) return;
+        adminConsoleInputEl.value = "";
+        void runAdminCommand(text);
+      });
+      adminConsoleInputEl?.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const text = String(adminConsoleInputEl?.value || "").trim();
+        if (!text) return;
+        adminConsoleInputEl.value = "";
+        void runAdminCommand(text);
       });
       sellCreatureNoEl.addEventListener("click", closeSellCreatureModal);
       sellCreatureYesEl.addEventListener("click", () => {
@@ -9871,7 +9896,7 @@
           multiplayer.profile.email = String(joined.profile.email || multiplayer.profile.email || "");
         }
         if (typeof joined.isAdmin === "boolean") multiplayer.isAdmin = joined.isAdmin;
-        if (!multiplayer.isAdmin) adminPanelEl?.classList.remove("open");
+        if (!multiplayer.isAdmin) toggleAdminPanel(false);
         multiplayer.connected = true;
         init();
         const spawn = playerSpawnForSlot(multiplayer.slot);
@@ -10082,7 +10107,7 @@
         remoteDetailSignature = "";
         clearRemoteDetailMeshes();
         renderChat();
-        adminPanelEl?.classList.remove("open");
+        toggleAdminPanel(false);
         chatPanelEl.classList.remove("open");
         closeServerConfigPanel();
         serverGateEl.classList.remove("show");
