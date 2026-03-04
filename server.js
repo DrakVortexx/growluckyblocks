@@ -3446,9 +3446,14 @@ app.post("/api/admin/spawn", async (req, res) => {
     const scope = scopeRaw === "global" ? "global" : "server";
     const amountRaw = Number(req.body?.amount);
     const amount = Number.isFinite(amountRaw) ? Math.max(1, Math.min(100, Math.floor(amountRaw))) : 1;
+    const blockKeyRaw = String(req.body?.blockKey || req.body?.rankKey || req.body?.blockType || "").trim();
+    const blockKey = normalizeRankKey(blockKeyRaw);
+    const mutation = normalizeMutation(req.body?.mutation || "normal");
+    const isSpecialBlock = SPECIAL_BLOCK_KEYS.has(blockKey);
+    const isLuckyBlockSpawn = !!blockKeyRaw && (RANK_KEYS.has(blockKey) || isSpecialBlock);
     const creatureInput = String(req.body?.creatureName || req.body?.name || "").trim();
-    const catalog = SPAWN_CREATURE_CATALOG_BY_KEY.get(normalizeCreatureNameKey(creatureInput)) || null;
-    if (!catalog) {
+    const catalog = isLuckyBlockSpawn ? null : (SPAWN_CREATURE_CATALOG_BY_KEY.get(normalizeCreatureNameKey(creatureInput)) || null);
+    if (!isLuckyBlockSpawn && !catalog) {
       res.status(400).json({ error: "unknown creature name" });
       return;
     }
@@ -3456,6 +3461,88 @@ app.post("/api/admin/spawn", async (req, res) => {
     const targets = scope === "global"
       ? [...serverStates.values()]
       : [ensureServerState(serverId, {})];
+
+    if (isLuckyBlockSpawn) {
+      const uniquePlayerIds = new Set();
+      const playerServerMap = new Map();
+      for (const state of targets) {
+        for (const pid of state.activeSlots.keys()) {
+          const playerId = String(pid || "");
+          if (!playerId) continue;
+          uniquePlayerIds.add(playerId);
+          if (!playerServerMap.has(playerId)) playerServerMap.set(playerId, []);
+          playerServerMap.get(playerId).push(state);
+        }
+      }
+      if (uniquePlayerIds.size < 1) {
+        res.json({
+          ok: true,
+          scope,
+          serverId,
+          blockKey,
+          mutation,
+          amount,
+          spawned: 0,
+          recipients: 0,
+          affectedServers: targets.length
+        });
+        return;
+      }
+
+      let recipients = 0;
+      for (const targetPlayerId of uniquePlayerIds) {
+        const target = ensurePlayerDataShape(await getPlayerDoc(targetPlayerId, decoded), 0);
+        if (!target.data.state || typeof target.data.state !== "object") target.data.state = {};
+        if (!target.data.state.luckyInventory || typeof target.data.state.luckyInventory !== "object") target.data.state.luckyInventory = {};
+        if (!target.data.state.luckyMoonInventory || typeof target.data.state.luckyMoonInventory !== "object") target.data.state.luckyMoonInventory = {};
+        if (!target.data.state.luckySoulboundInventory || typeof target.data.state.luckySoulboundInventory !== "object") target.data.state.luckySoulboundInventory = {};
+        if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") target.data.state.specialLuckyInventory = {};
+
+        if (isSpecialBlock) {
+          if (!target.data.state.specialLuckyInventory[blockKey] || typeof target.data.state.specialLuckyInventory[blockKey] !== "object") {
+            target.data.state.specialLuckyInventory[blockKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
+          }
+          target.data.state.specialLuckyInventory[blockKey][mutation] = parsePositiveInt(target.data.state.specialLuckyInventory[blockKey][mutation] || 0, 0) + amount;
+        } else {
+          const bucket = mutation === "soulbound" ? "luckySoulboundInventory" : (mutation === "bluemoon" ? "luckyMoonInventory" : "luckyInventory");
+          target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + amount;
+        }
+
+        await setPlayerDocMerge(targetPlayerId, { data: target.data, updatedAt: Date.now() }, decoded);
+        recipients += 1;
+        const giveId = `spawn-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const states = playerServerMap.get(targetPlayerId) || [];
+        for (const state of states) {
+          notifyPlayer(state, targetPlayerId, {
+            type: "admin-give",
+            giveId,
+            resource: "luckyblock",
+            rankKey: blockKey,
+            blockKey,
+            mutation,
+            amount,
+            stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
+            blueMoon: mutation === "bluemoon",
+            soulbound: mutation === "soulbound",
+            from: caller.profile?.username || playerTag(uid)
+          });
+        }
+      }
+
+      res.json({
+        ok: true,
+        scope,
+        serverId,
+        blockKey,
+        mutation,
+        amount,
+        spawned: recipients * amount,
+        recipients,
+        affectedServers: targets.length
+      });
+      return;
+    }
+
     let spawned = 0;
     for (const state of targets) {
       for (let i = 0; i < amount; i += 1) {

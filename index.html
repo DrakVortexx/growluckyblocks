@@ -1849,7 +1849,7 @@
     <div style="margin-bottom:12px">
       <h4 style="margin:0 0 4px;color:#ff9f57">Console</h4>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <input id="adminConsoleInput" type="text" placeholder="Type command (luck, give, spawn, reset, tutorial, event, broadcast...)" style="flex:1;padding:6px" />
+        <input id="adminConsoleInput" type="text" placeholder="Type command (luck, give, spawn, spawnblock, reset, tutorial, event, broadcast...)" style="flex:1;padding:6px" />
         <button id="adminConsoleRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Run</button>
       </div>
     </div>
@@ -1915,6 +1915,35 @@
         </select>
         <input id="adminSpawnAmount" type="number" min="1" placeholder="Amount" style="width:80px;padding:4px">
         <button id="adminSpawnRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Spawn</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Spawn Lucky Blocks</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <select id="adminSpawnBlockRank" style="padding:4px">
+          <option value="basic">Basic</option>
+          <option value="common">Common</option>
+          <option value="rare">Rare</option>
+          <option value="epic">Epic</option>
+          <option value="legendary">Legendary</option>
+          <option value="mythic">Mythic</option>
+          <option value="godly">Godly</option>
+          <option value="secret">Secret</option>
+          <option value="transcendent">Transcendent</option>
+          <option value="omniversal">Omniversal</option>
+          <option value="valentinesblock">Valentine's</option>
+        </select>
+        <select id="adminSpawnBlockMutation" style="padding:4px">
+          <option value="normal">Normal</option>
+          <option value="bluemoon">Blue Moon</option>
+          <option value="soulbound">Soulbound</option>
+        </select>
+        <select id="adminSpawnBlockScope" style="padding:4px">
+          <option value="server">Server</option>
+          <option value="global">Global</option>
+        </select>
+        <input id="adminSpawnBlockAmount" type="number" min="1" placeholder="Amount" style="width:80px;padding:4px">
+        <button id="adminSpawnBlockRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Spawn Blocks</button>
       </div>
     </div>
     <div style="margin-bottom:12px">
@@ -2247,6 +2276,11 @@
     const adminSpawnCreatureEl = document.getElementById("adminSpawnCreature");
     const adminSpawnScopeEl = document.getElementById("adminSpawnScope");
     const adminSpawnAmountEl = document.getElementById("adminSpawnAmount");
+    const adminSpawnBlockRunEl = document.getElementById("adminSpawnBlockRun");
+    const adminSpawnBlockRankEl = document.getElementById("adminSpawnBlockRank");
+    const adminSpawnBlockMutationEl = document.getElementById("adminSpawnBlockMutation");
+    const adminSpawnBlockScopeEl = document.getElementById("adminSpawnBlockScope");
+    const adminSpawnBlockAmountEl = document.getElementById("adminSpawnBlockAmount");
     const adminResetRunEl = document.getElementById("adminResetRun");
     const adminResetUserEl = document.getElementById("adminResetUser");
     const adminTutorialRunEl = document.getElementById("adminTutorialRun");
@@ -4860,49 +4894,13 @@
         }
         if (head === "spawn") {
           if (parts.length < 3) {
-            state.info = "Usage: spawn <creature|adminblock|godlyblock> server|global [amount]";
+            state.info = "Usage: spawn <creature> server|global [amount]";
             return;
           }
           const lastPart = String(parts[parts.length - 1] || "").toLowerCase();
           const secondLastPart = String(parts[parts.length - 2] || "").toLowerCase();
           let amount = 1;
           let scope = "server";
-          let targetName = "";
-          
-          // Check if it's spawning adminblock or godlyblock
-          if (parts[1] === "adminblock" || parts[1] === "godlyblock") {
-            const blockType = parts[1];
-            // Parse scope and amount
-            if (secondLastPart === "server" || secondLastPart === "global") {
-              scope = secondLastPart;
-              amount = Math.max(1, Math.floor(Number(lastPart) || 1));
-            } else if (lastPart === "server" || lastPart === "global") {
-              scope = lastPart;
-              amount = 1;
-            } else {
-              amount = Math.max(1, Math.floor(Number(lastPart) || 1));
-            }
-            
-            if (!Number.isFinite(amount) || amount < 1) {
-              state.info = "Usage: spawn <adminblock|godlyblock> server|global [amount]";
-              return;
-            }
-            
-            // Spawn the special block
-            const data = await apiJson("/api/admin/spawn", "POST", {
-              serverId: multiplayer.serverId,
-              blockType,
-              scope,
-              amount: Math.floor(amount)
-            }, token);
-            
-            const blockLabel = blockType === "adminblock" ? "Admin" : "Godly";
-            state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${blockLabel} Block(s) (${scope}).`;
-            state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${blockLabel} Block(s) (${scope})`;
-            return;
-          }
-          
-          // Original creature spawning logic
           const creatureName = parts.slice(1, parts.length - 2).join(" ").trim();
           if (secondLastPart === "server" || secondLastPart === "global") {
             scope = secondLastPart;
@@ -4915,7 +4913,7 @@
           }
           
           if (!creatureName || !Number.isFinite(amount) || amount < 1) {
-            state.info = "Usage: spawn <creature|adminblock|godlyblock> server|global [amount]";
+            state.info = "Usage: spawn <creature> server|global [amount]";
             return;
           }
           
@@ -4929,6 +4927,42 @@
           const creatureLabel = String(data?.creature?.name || creatureName);
           state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope}).`;
           state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope})`;
+          return;
+        }
+        if (head === "spawnblock" || head === "spawnlb") {
+          const blockKey = normalizeBlockKey(String(parts[1] || ""));
+          const a3 = String(parts[2] || "").trim().toLowerCase();
+          const a4 = String(parts[3] || "").trim().toLowerCase();
+          const a5 = String(parts[4] || "").trim().toLowerCase();
+          let scope = "server";
+          let amount = 1;
+          let mutation = "normal";
+          if (!blockKey) {
+            state.info = "Usage: spawnblock <rarity|valentinesblock> server|global [amount] [mutation]";
+            return;
+          }
+          if (a3 === "server" || a3 === "global") {
+            scope = a3;
+            if (Number.isFinite(Number(a4)) && Number(a4) >= 1) {
+              amount = Math.max(1, Math.floor(Number(a4)));
+              mutation = normalizeMutation(a5 || "normal");
+            } else {
+              mutation = normalizeMutation(a4 || "normal");
+            }
+          } else {
+            state.info = "Usage: spawnblock <rarity|valentinesblock> server|global [amount] [mutation]";
+            return;
+          }
+          const data = await apiJson("/api/admin/spawn", "POST", {
+            serverId: multiplayer.serverId,
+            scope,
+            amount,
+            blockKey,
+            mutation
+          }, token);
+          const spawnedBlockMeta = blockMetaByKey(data?.blockKey || blockKey);
+          const spawnedMutation = normalizeMutation(data?.mutation || mutation);
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`} block(s) to ${formatNumber(Number(data?.recipients || 0))} player(s) (${scope}).`;
           return;
         }
         if (head === "reset") {
@@ -4965,7 +4999,7 @@
           showBroadcast(`[ADMIN] ${text}`, 12);
           return;
         }
-        state.info = "Unknown command. Use: luck, event, give, spawn, reset, tutorial, or broadcast";
+        state.info = "Unknown command. Use: luck, event, give, spawn, spawnblock, reset, tutorial, or broadcast";
       } catch {
         state.info = "Command failed.";
       }
@@ -9107,11 +9141,9 @@
         const text = String(chatInputEl.value || "").trim();
         if (!text || !multiplayer.ws || multiplayer.ws.readyState !== WebSocket.OPEN) return;
         
-        // Check for admin spawn commands
-        if (multiplayer.isAdmin && text.startsWith("spawn ")) {
-          const parts = text.toLowerCase().split(/\s+/);
-          if (parts[1] === "adminblock" || parts[1] === "godlyblock") {
-            // Execute as admin command instead of sending to chat
+        if (multiplayer.isAdmin) {
+          const head = String(text.split(/\s+/)[0] || "").toLowerCase();
+          if (["luck", "event", "give", "spawn", "spawnblock", "spawnlb", "reset", "tutorial", "broadcast"].includes(head)) {
             void runAdminCommand(text);
             chatInputEl.value = "";
             return;
@@ -9161,6 +9193,17 @@
           return;
         }
         void runAdminCommand(`spawn ${creature} ${scope} ${amount}`);
+      });
+      adminSpawnBlockRunEl?.addEventListener("click", () => {
+        const blockKey = normalizeBlockKey(String(adminSpawnBlockRankEl?.value || "").trim());
+        const mutation = normalizeMutation(String(adminSpawnBlockMutationEl?.value || "normal"));
+        const scope = String(adminSpawnBlockScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
+        const amount = Math.max(1, Math.floor(Number(adminSpawnBlockAmountEl?.value || 1)));
+        if (!blockKey) {
+          state.info = "Select a block rarity for Spawn Lucky Blocks.";
+          return;
+        }
+        void runAdminCommand(`spawnblock ${blockKey} ${scope} ${amount} ${mutation}`);
       });
       adminResetRunEl?.addEventListener("click", () => {
         const username = String(adminResetUserEl?.value || "").trim();
