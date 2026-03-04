@@ -4609,6 +4609,22 @@
       renderChat();
     }
 
+    function toggleAdminPanel(force = null) {
+      if (!adminPanelEl) return;
+      const open = force === null ? !adminPanelEl?.classList.contains("open") : !!force;
+      adminPanelEl.classList.toggle("open", open);
+      if (open) {
+        toggleGuide(false);
+        toggleChat(false);
+        toggleSettingsPanel(false);
+        toggleIndexPanel(false);
+        toggleCosmeticsPanel(false);
+        toggleShop(false);
+        toggleInventory(false);
+        document.exitPointerLock();
+      }
+    }
+
     function toggleChat(force = null) {
       if (!chatPanelEl) return;
       const open = force === null ? !chatPanelEl?.classList.contains("open") : !!force;
@@ -8838,7 +8854,7 @@
       dockSettingsBtn.classList.toggle("active", settingsPanelEl?.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
       dockChatBtn.classList.toggle("active", chatPanelEl?.classList.contains("open"));
-      dockAdminBtn.classList.toggle("active", chatPanelEl?.classList.contains("open"));
+      dockAdminBtn.classList.toggle("active", adminPanelEl?.classList.contains("open"));
       const invSig = inventoryRenderSignature();
       if (invSig !== lastInventoryRenderSig) {
         renderInventory();
@@ -8965,7 +8981,7 @@
       });
       dockAdminBtn.addEventListener("click", () => {
         toggleGuide(false);
-        toggleChat();
+        toggleAdminPanel();
       });
       dockLogoutBtn.addEventListener("click", async () => {
         try {
