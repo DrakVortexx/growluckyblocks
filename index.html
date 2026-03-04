@@ -1844,6 +1844,94 @@
     <div id="indexSummary" style="font-size:12px;color:#d3e9fb;margin-bottom:8px"></div>
     <div id="indexList" class="indexList"></div>
   </div>
+  <div id="adminPanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:88;min-width:450px;max-width:min(94vw,600px);padding:14px;">
+    <h3 style="margin:0 0 6px">Admin Panel</h3>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Server Luck</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminLuckAmount" type="number" min="0" placeholder="Amount" style="flex:1;padding:4px">
+        <select id="adminLuckScope" style="padding:4px">
+          <option value="server">Server</option>
+          <option value="global">Global</option>
+        </select>
+        <button id="adminLuckRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Set Luck</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Events</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminEventSeconds" type="number" min="10" placeholder="Seconds" style="flex:1;padding:4px">
+        <select id="adminEventScope" style="padding:4px">
+          <option value="server">Server</option>
+          <option value="global">Global</option>
+        </select>
+        <button id="adminEventRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Blue Moon</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Give Blocks</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminGiveUser" type="text" placeholder="Username" style="flex:1;padding:4px">
+        <select id="adminGiveRank" style="padding:4px">
+          <option value="basic">Basic</option>
+          <option value="uncommon">Uncommon</option>
+          <option value="rare">Rare</option>
+          <option value="epic">Epic</option>
+          <option value="legendary">Legendary</option>
+          <option value="mythic">Mythic</option>
+          <option value="transcendent">Transcendent</option>
+        </select>
+        <input id="adminGiveAmount" type="number" min="1" placeholder="Amount" style="width:80px;padding:4px">
+        <select id="adminGiveMutation" style="padding:4px">
+          <option value="normal">Normal</option>
+          <option value="bluemoon">Blue Moon</option>
+          <option value="soulbound">Soulbound</option>
+        </select>
+        <button id="adminGiveRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Give</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Give Stardust</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminDustUser" type="text" placeholder="Username" style="flex:1;padding:4px">
+        <input id="adminDustAmount" type="number" min="1" placeholder="Amount" style="width:120px;padding:4px">
+        <button id="adminDustRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Give Dust</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Spawn Creatures</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminSpawnCreature" type="text" placeholder="Creature name" style="flex:1;padding:4px">
+        <select id="adminSpawnScope" style="padding:4px">
+          <option value="server">Server</option>
+          <option value="global">Global</option>
+        </select>
+        <input id="adminSpawnAmount" type="number" min="1" placeholder="Amount" style="width:80px;padding:4px">
+        <button id="adminSpawnRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Spawn</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Player Management</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminResetUser" type="text" placeholder="Username" style="flex:1;padding:4px">
+        <button id="adminResetRun" class="btn" style="background:rgba(255,100,100,0.9);border-color:rgba(255,100,100,0.6)">Reset</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminTutorialUser" type="text" placeholder="Username" style="flex:1;padding:4px">
+        <button id="adminTutorialRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Reset Tutorial</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <h4 style="margin:0 0 4px;color:#ff9f57">Broadcast</h4>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="adminBroadcastText" type="text" placeholder="Message" style="flex:1;padding:4px">
+        <button id="adminBroadcastRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Broadcast</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="toggleAdminPanel(false)">Close</button>
+    </div>
+  </div>
   <div id="sellCreatureModal" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:85;min-width:340px;padding:14px;">
     <h3 style="margin:0 0 6px">Sell Creature</h3>
     <div id="sellCreatureText" style="font-size:13px;color:#d9ecff;margin-bottom:10px"></div>
