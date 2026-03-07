@@ -2778,6 +2778,8 @@
     let wheelSpinVelocity = 0;
     let blueMoonMesh = null;
     let blueMoonGlow = null;
+    const leprechaunSkyClovers = [];
+    const leprechaunGroundPlants = [];
     let leaderboardBoardMesh = null;
     let leaderboardBoardTexture = null;
     let leaderboardBoardCanvas = null;
@@ -5120,7 +5122,7 @@
           const spawnedBlockMeta = blockMetaByKey(data?.blockKey || blockKey);
           const spawnedMutation = normalizeMutation(data?.mutation || mutation);
           const spawnedTrait = normalizeTrait(data?.trait || trait);
-          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`}${spawnedTrait === "leprechaun" ? " [Leprechaun]" : ""} block(s) to ${formatNumber(Number(data?.recipients || 0))} player(s) (${scope}).`;
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`}${spawnedTrait === "leprechaun" ? " [Leprechaun]" : ""} block drop(s) on spawn pad (${scope}).`;
           return;
         }
         if (head === "reset") {
@@ -5690,13 +5692,17 @@
       if (!raw || typeof raw !== "object") return null;
       const id = String(raw.id || "").trim();
       if (!id) return null;
-      const rankKey = normalizeBlockKey(raw.rankKey || "basic");
+      const itemType = String(raw.itemType || "creature").trim().toLowerCase() === "block" ? "block" : "creature";
+      const rankKey = normalizeBlockKey(raw.rankKey || raw.blockKey || "basic");
       return {
         id,
-        name: String(raw.name || "Creature"),
+        itemType,
+        name: String(raw.name || (itemType === "block" ? "Lucky Block" : "Creature")),
         rankKey,
+        blockKey: rankKey,
         rate: Math.max(1, Number(raw.rate || 1)),
         mutation: normalizeMutation(raw.mutation || "normal"),
+        trait: normalizeTrait(raw.trait || "none"),
         x: Number(raw.x || 0),
         z: Number(raw.z || 0)
       };
@@ -5730,12 +5736,19 @@
       }
       spawnGrabBusy = true;
       try {
-        await apiJsonAuth("/api/spawn/grab", "POST", {
+        const result = await apiJsonAuth("/api/spawn/grab", "POST", {
           playerId: multiplayer.playerId,
           serverId: multiplayer.serverId,
           spawnId: drop.id
         });
-        state.info = `Grabbed ${drop.name}. Carry it to your barn and press E on an empty pedestal.`;
+        if (String(result?.itemType || "") === "block" || drop.itemType === "block") {
+          const meta = blockMetaByKey(result?.blockKey || drop.blockKey || drop.rankKey || "basic");
+          const mutation = normalizeMutation(result?.mutation || drop.mutation || "normal");
+          const trait = normalizeTrait(result?.trait || drop.trait || "none");
+          state.info = `Grabbed ${meta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block.`;
+        } else {
+          state.info = `Grabbed ${drop.name}. Carry it to your barn and press E on an empty pedestal.`;
+        }
         updateUI();
         return true;
       } catch (err) {
@@ -5753,7 +5766,7 @@
         .map((d) => {
           const drop = normalizeWorldSpawnDrop(d);
           if (!drop) return "";
-          return `${drop.id}:${drop.rankKey}:${drop.mutation}:${drop.x.toFixed(2)}:${drop.z.toFixed(2)}`;
+          return `${drop.id}:${drop.itemType}:${drop.rankKey}:${drop.mutation}:${drop.trait}:${drop.x.toFixed(2)}:${drop.z.toFixed(2)}`;
         })
         .filter(Boolean)
         .join("|");
@@ -5765,13 +5778,32 @@
         const drop = normalizeWorldSpawnDrop(raw);
         if (!drop) continue;
         const rankMeta = getRankByKey(drop.rankKey);
-        const mesh = createCreatureMesh(rankMeta.key, drop.name);
-        mesh.position.set(drop.x, 1.15, drop.z);
+        let mesh = null;
+        if (drop.itemType === "block") {
+          const mat = blockMaterialForRank(drop.rankKey);
+          mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.88, 0.88, 0.88),
+            new THREE.MeshStandardMaterial({
+              color: mat.color,
+              roughness: 0.34,
+              metalness: 0.26,
+              emissive: mat.emissive,
+              emissiveIntensity: mat.emissiveIntensity
+            })
+          );
+          mesh.position.set(drop.x, 1.0, drop.z);
+          const meta = blockMetaByKey(drop.blockKey || drop.rankKey);
+          const line3 = `${drop.mutation === "normal" ? "" : mutationBadge(drop.mutation)}${drop.trait === "leprechaun" ? `${drop.mutation === "normal" ? "" : " • "}Leprechaun` : ""}`;
+          setMeshLabel(mesh, `${drop.trait === "leprechaun" ? "[Leprechaun] " : ""}${meta.label}`, "Lucky Block", line3, mutationTint(drop.mutation));
+        } else {
+          mesh = createCreatureMesh(rankMeta.key, drop.name);
+          mesh.position.set(drop.x, 1.15, drop.z);
+          setMeshLabel(mesh, rankMeta.label, drop.name, `${formatMoney(drop.rate)}/s`, mutationTint(drop.mutation));
+        }
         applyMutationFx(mesh, drop.mutation, false);
-        setMeshLabel(mesh, rankMeta.label, drop.name, `${formatMoney(drop.rate)}/s`, mutationTint(drop.mutation));
         scene.add(mesh);
         worldSpawnMeshes.push(mesh);
-        worldSpawnFxMeshes.push({ mesh, baseY: 1.15, phase: Math.random() * Math.PI * 2 });
+        worldSpawnFxMeshes.push({ mesh, baseY: drop.itemType === "block" ? 1.0 : 1.15, phase: Math.random() * Math.PI * 2 });
 
         const it = {
           name: `Spawn ${drop.id}`,
@@ -5779,6 +5811,10 @@
           radius: 2.15,
           priority: 9,
           get prompt() {
+            if (drop.itemType === "block") {
+              const meta = blockMetaByKey(drop.blockKey || drop.rankKey);
+              return `[E] Grab ${meta.label}${drop.mutation === "normal" ? "" : ` ${mutationBadge(drop.mutation)}`}${drop.trait === "leprechaun" ? " [Leprechaun]" : ""} Block`;
+            }
             return `[E] Grab ${drop.name} (${rankMeta.label})`;
           },
           interact(code) {
@@ -6741,7 +6777,7 @@
     function buildBlueMoonSky() {
       blueMoonMesh = new THREE.Mesh(
         new THREE.SphereGeometry(7.2, 26, 24),
-        new THREE.MeshStandardMaterial({ color: 0x7ab8ff, emissive: 0x2f5ea8, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.02 })
+        new THREE.MeshStandardMaterial({ color: 0x79e493, emissive: 0x2d8f4a, emissiveIntensity: 0.68, roughness: 0.3, metalness: 0.02 })
       );
       blueMoonMesh.position.set(-120, 98, -182);
       blueMoonMesh.visible = false;
@@ -6749,11 +6785,49 @@
 
       blueMoonGlow = new THREE.Mesh(
         new THREE.SphereGeometry(11.5, 20, 18),
-        new THREE.MeshBasicMaterial({ color: 0x7ab8ff, transparent: true, opacity: 0.22, depthWrite: false })
+        new THREE.MeshBasicMaterial({ color: 0x76e487, transparent: true, opacity: 0.24, depthWrite: false })
       );
       blueMoonGlow.position.copy(blueMoonMesh.position);
       blueMoonGlow.visible = false;
       scene.add(blueMoonGlow);
+
+      for (let i = 0; i < 22; i += 1) {
+        const clover = new THREE.Group();
+        const leafMat = new THREE.MeshBasicMaterial({ color: 0x5be06f, transparent: true, opacity: 0.78, depthWrite: false });
+        for (let j = 0; j < 4; j += 1) {
+          const leaf = new THREE.Mesh(new THREE.SphereGeometry(1.1, 8, 8), leafMat);
+          const a = (Math.PI * 2 * j) / 4;
+          leaf.position.set(Math.cos(a) * 1.4, Math.sin(a) * 1.1, 0);
+          clover.add(leaf);
+        }
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.1, 6), new THREE.MeshBasicMaterial({ color: 0x2ea84c, transparent: true, opacity: 0.72, depthWrite: false }));
+        stem.position.set(0, -1.9, 0);
+        clover.add(stem);
+        clover.position.set(-145 + Math.random() * 60, 78 + Math.random() * 40, -230 + Math.random() * 95);
+        clover.rotation.z = Math.random() * Math.PI * 2;
+        clover.visible = false;
+        scene.add(clover);
+        leprechaunSkyClovers.push(clover);
+      }
+
+      for (let i = 0; i < 18; i += 1) {
+        const g = new THREE.Group();
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 6), new THREE.MeshStandardMaterial({ color: 0x2e9547, roughness: 0.9 }));
+        stem.position.y = 0.18;
+        g.add(stem);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x4cc965, roughness: 0.75 });
+        for (let j = 0; j < 3; j += 1) {
+          const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 6), leafMat);
+          const a = (Math.PI * 2 * j) / 3;
+          leaf.position.set(Math.cos(a) * 0.1, 0.34, Math.sin(a) * 0.1);
+          leaf.scale.set(1.2, 0.65, 1.2);
+          g.add(leaf);
+        }
+        g.position.set(-3 + Math.random() * 14, 0, -6 + Math.random() * 12);
+        g.visible = false;
+        scene.add(g);
+        leprechaunGroundPlants.push(g);
+      }
     }
 
     function addTree(x, z, s = 1) {
@@ -7030,6 +7104,31 @@
           openWheelPanel();
         }
       });
+
+      const fuseBase = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 1.1, 1.8),
+        new THREE.MeshStandardMaterial({ color: 0x2a3f2c, roughness: 0.45, metalness: 0.28 })
+      );
+      fuseBase.position.set(-2.6, 0.55, 4.25);
+      fuseBase.castShadow = true;
+      fuseBase.receiveShadow = true;
+      scene.add(fuseBase);
+      const fuseTop = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.72, 0.72, 0.22, 20),
+        new THREE.MeshStandardMaterial({ color: 0x58d675, emissive: 0x2e8f47, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.46 })
+      );
+      fuseTop.position.set(-2.6, 1.18, 4.25);
+      fuseTop.castShadow = true;
+      scene.add(fuseTop);
+      registerInteractable({
+        name: "Leprechaun Fuse Machine",
+        position: new THREE.Vector3(-2.6, 0, 4.25),
+        radius: 2.6,
+        prompt: "[E] Open Leprechaun Fuse",
+        interact() {
+          toggleFusePanel(true);
+        }
+      });
     }
 
     function interactWithPlot(plot) {
@@ -7062,7 +7161,7 @@
         const base = Math.max(rank.min, plot.seedRollValue || randomRange(rank.min, rank.max));
         const value = base * (1 + state.farmPayoutBonus + state.plotExpansionTier * 0.06);
         const droppedValentine = shouldDropValentinesBlock();
-        const rewardBlockKey = droppedValentine ? "valentinesblock" : (trait === "leprechaun" ? "leprechaunblock" : rank.key);
+        const rewardBlockKey = droppedValentine ? "valentinesblock" : rank.key;
         const rewardBlockMeta = blockMetaByKey(rewardBlockKey);
         state.money += value;
         addLuckyBlock(rewardBlockKey, 1, mutation, trait);
@@ -9174,15 +9273,19 @@
       if (!fusePanelEl || fusePanelEl.style.display === "none") return;
       const list = fuseCandidates();
       const selects = [fusePick1El, fusePick2El, fusePick3El, fusePick4El];
+      const activeSel = document.activeElement;
+      const editingFuseSelect = selects.includes(activeSel);
       const current = selects.map((s) => String(s?.value || ""));
       const options = [`<option value="">Select creature...</option>`]
         .concat(list.map((c) => `<option value="${c.id}">${c.name} (${c.rank.label}) ${formatMoney(c.rate)}/s${normalizeTrait(c.trait || "none") === "leprechaun" ? " [Leprechaun]" : ""}</option>`))
         .join("");
-      for (const [i, sel] of selects.entries()) {
-        if (!sel) continue;
-        sel.innerHTML = options;
-        const fallback = list[i] ? String(list[i].id || "") : "";
-        sel.value = list.some((c) => String(c.id) === current[i]) ? current[i] : fallback;
+      if (!editingFuseSelect) {
+        for (const [i, sel] of selects.entries()) {
+          if (!sel) continue;
+          sel.innerHTML = options;
+          const fallback = list[i] ? String(list[i].id || "") : "";
+          sel.value = list.some((c) => String(c.id) === current[i]) ? current[i] : fallback;
+        }
       }
       const picked = selects.map((s) => String(s?.value || "")).filter(Boolean);
       const unique = [...new Set(picked)];
@@ -9375,6 +9478,7 @@
 
     function installEvents() {
       addEventListener("resize", size);
+      if (dockFuseBtn) dockFuseBtn.style.display = "none";
 
       document.addEventListener("keydown", (e) => {
         const target = e.target;
@@ -9477,8 +9581,7 @@
         toggleIndexPanel();
       });
       dockFuseBtn.addEventListener("click", () => {
-        toggleGuide(false);
-        toggleFusePanel();
+        // Fuse is opened from the in-world machine now.
       });
       dockCosmeticsBtn.addEventListener("click", () => {
         toggleGuide(false);
@@ -9761,8 +9864,8 @@
       sun.position.x = Math.cos(t) * 35;
       sun.position.y = 7 + y * 33;
       if (blueMoonActive) {
-        scene.fog.color.setHSL(0.59, 0.56, 0.54 + y * 0.12);
-        scene.background.setHSL(0.59, 0.7, 0.51 + y * 0.14);
+        scene.fog.color.setHSL(0.34, 0.52, 0.42 + y * 0.14);
+        scene.background.setHSL(0.34, 0.62, 0.36 + y * 0.16);
       } else {
         scene.fog.color.setHSL(0.56, 0.5, 0.58 + y * 0.2);
         scene.background.setHSL(0.56, 0.64, 0.56 + y * 0.22);
@@ -9775,6 +9878,15 @@
           blueMoonGlow.scale.setScalar(1 + Math.sin(now * 0.55) * 0.04);
         }
       }
+      for (let i = 0; i < leprechaunSkyClovers.length; i += 1) {
+        const c = leprechaunSkyClovers[i];
+        c.visible = blueMoonActive;
+        if (blueMoonActive) {
+          c.rotation.z += 0.0015 + (i % 4) * 0.0003;
+          c.position.y += Math.sin(now * 0.7 + i) * 0.01;
+        }
+      }
+      for (const p of leprechaunGroundPlants) p.visible = blueMoonActive;
     }
 
     function updateWheelVisual(dt) {

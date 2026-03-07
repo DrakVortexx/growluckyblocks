@@ -1355,11 +1355,15 @@ function pruneDisconnectedSlots(serverState) {
 
 function normalizeSpawnDrop(raw) {
   if (!raw || typeof raw !== "object") return null;
+  const itemType = String(raw.itemType || "creature").trim().toLowerCase() === "block" ? "block" : "creature";
+  const rankKey = normalizeRankKey(raw.rankKey || raw.blockKey || "basic");
   return {
     id: String(raw.id || ""),
     serverId: cleanServerId(raw.serverId || DEFAULT_SERVER_ID),
-    name: String(raw.name || "Creature").slice(0, 48),
-    rankKey: normalizeRankKey(raw.rankKey || "basic"),
+    itemType,
+    name: String(raw.name || (itemType === "block" ? "Lucky Block" : "Creature")).slice(0, 48),
+    rankKey,
+    blockKey: rankKey,
     rate: Math.max(1, Number(raw.rate || 1)),
     mutation: normalizeMutation(raw.mutation || "normal"),
     trait: normalizeTrait(raw.trait || "none"),
@@ -1398,6 +1402,29 @@ function addSpawnDrop(serverState, creatureSpec, mutation = "normal", trait = "n
     name: String(creatureSpec.name || "Creature"),
     rankKey: normalizeRankKey(creatureSpec.rankKey || "basic"),
     rate: Math.max(1, Number(creatureSpec.rate || 1)),
+    mutation: normalizeMutation(mutation || "normal"),
+    trait: normalizeTrait(trait || "none"),
+    x: pos.x,
+    z: pos.z,
+    spawnedAt: Date.now()
+  };
+  serverState.spawnDrops.set(drop.id, drop);
+  return normalizeSpawnDrop(drop);
+}
+
+function addSpawnBlockDrop(serverState, blockKey, mutation = "normal", trait = "none") {
+  if (!serverState) return null;
+  const key = normalizeRankKey(blockKey || "basic");
+  if (!RANK_KEYS.has(key) && !SPECIAL_BLOCK_KEYS.has(key)) return null;
+  const pos = nextSpawnDropPosition(serverState);
+  const drop = {
+    id: `sp-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    serverId: serverState.id,
+    itemType: "block",
+    name: "Lucky Block",
+    rankKey: key,
+    blockKey: key,
+    rate: 1,
     mutation: normalizeMutation(mutation || "normal"),
     trait: normalizeTrait(trait || "none"),
     x: pos.x,
@@ -2960,11 +2987,59 @@ app.post("/api/spawn/grab", async (req, res) => {
     }
     const playerPos = serverState.activePositions.get(playerId) || null;
     if (!playerPos || distance2d(playerPos.x, playerPos.z, drop.x, drop.z) > 2.65) {
-      res.status(400).json({ error: "too far from spawn creature" });
+      res.status(400).json({ error: "too far from spawn drop" });
       return;
     }
 
     serverState.spawnDrops.delete(spawnId);
+    if (String(drop.itemType || "creature") === "block") {
+      const player = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), serverState.activeSlots.get(playerId) ?? 0);
+      const key = normalizeRankKey(drop.blockKey || drop.rankKey || "basic");
+      const mutation = normalizeMutation(drop.mutation || "normal");
+      const trait = normalizeTrait(drop.trait || "none");
+      const isSpecial = SPECIAL_BLOCK_KEYS.has(key);
+      if (isSpecial) {
+        const bucketName = trait === "leprechaun" ? "specialLuckyTraitInventory" : "specialLuckyInventory";
+        if (!player.data.state[bucketName] || typeof player.data.state[bucketName] !== "object") player.data.state[bucketName] = {};
+        if (!player.data.state[bucketName][key] || typeof player.data.state[bucketName][key] !== "object") {
+          player.data.state[bucketName][key] = { normal: 0, bluemoon: 0, soulbound: 0 };
+        }
+        player.data.state[bucketName][key][mutation] = parsePositiveInt(player.data.state[bucketName][key][mutation] || 0, 0) + 1;
+      } else if (trait === "leprechaun") {
+        const bucket = mutation === "bluemoon"
+          ? "luckyMoonTraitInventory"
+          : (mutation === "soulbound" ? "luckySoulboundTraitInventory" : "luckyTraitInventory");
+        if (!player.data.state[bucket] || typeof player.data.state[bucket] !== "object") player.data.state[bucket] = {};
+        player.data.state[bucket][key] = parsePositiveInt(player.data.state[bucket][key] || 0, 0) + 1;
+      } else if (mutation === "bluemoon") {
+        if (!player.data.state.luckyMoonInventory || typeof player.data.state.luckyMoonInventory !== "object") player.data.state.luckyMoonInventory = {};
+        player.data.state.luckyMoonInventory[key] = parsePositiveInt(player.data.state.luckyMoonInventory[key] || 0, 0) + 1;
+      } else if (mutation === "soulbound") {
+        if (!player.data.state.luckySoulboundInventory || typeof player.data.state.luckySoulboundInventory !== "object") player.data.state.luckySoulboundInventory = {};
+        player.data.state.luckySoulboundInventory[key] = parsePositiveInt(player.data.state.luckySoulboundInventory[key] || 0, 0) + 1;
+      } else {
+        addLuckyByRank(player.data.state, key, 1);
+      }
+      await setPlayerDocMerge(playerId, { data: player.data, updatedAt: Date.now() }, decoded);
+      notifyPlayer(serverState, playerId, {
+        type: "admin-give",
+        giveId: `spawn-grab-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        resource: "luckyblock",
+        rankKey: key,
+        blockKey: key,
+        mutation,
+        trait,
+        amount: 1,
+        stardust: parsePositiveInt(player.data.state.stardust || 0, 0),
+        blueMoon: mutation === "bluemoon",
+        soulbound: mutation === "soulbound",
+        from: "Spawn Drop"
+      });
+      broadcastWorld(serverState);
+      res.json({ ok: true, itemType: "block", blockKey: key, mutation, trait, amount: 1 });
+      return;
+    }
+
     const carry = {
       id: `car-${spawnId}`,
       serverId,
@@ -3566,80 +3641,14 @@ app.post("/api/admin/spawn", async (req, res) => {
       : [ensureServerState(serverId, {})];
 
     if (isLuckyBlockSpawn) {
-      const uniquePlayerIds = new Set();
-      const playerServerMap = new Map();
+      let spawned = 0;
       for (const state of targets) {
-        for (const pid of state.activeSlots.keys()) {
-          const playerId = String(pid || "");
-          if (!playerId) continue;
-          uniquePlayerIds.add(playerId);
-          if (!playerServerMap.has(playerId)) playerServerMap.set(playerId, []);
-          playerServerMap.get(playerId).push(state);
+        for (let i = 0; i < amount; i += 1) {
+          const created = addSpawnBlockDrop(state, blockKey, mutation, trait);
+          if (created) spawned += 1;
         }
+        broadcastWorld(state);
       }
-      if (uniquePlayerIds.size < 1) {
-        res.json({
-          ok: true,
-          scope,
-          serverId,
-          blockKey,
-          mutation,
-          amount,
-          spawned: 0,
-          recipients: 0,
-          affectedServers: targets.length
-        });
-        return;
-      }
-
-      let recipients = 0;
-      for (const targetPlayerId of uniquePlayerIds) {
-        const target = ensurePlayerDataShape(await getPlayerDoc(targetPlayerId, decoded), 0);
-        if (!target.data.state || typeof target.data.state !== "object") target.data.state = {};
-        if (!target.data.state.luckyInventory || typeof target.data.state.luckyInventory !== "object") target.data.state.luckyInventory = {};
-        if (!target.data.state.luckyMoonInventory || typeof target.data.state.luckyMoonInventory !== "object") target.data.state.luckyMoonInventory = {};
-        if (!target.data.state.luckySoulboundInventory || typeof target.data.state.luckySoulboundInventory !== "object") target.data.state.luckySoulboundInventory = {};
-        if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") target.data.state.specialLuckyInventory = {};
-        if (!target.data.state.luckyTraitInventory || typeof target.data.state.luckyTraitInventory !== "object") target.data.state.luckyTraitInventory = {};
-        if (!target.data.state.luckyMoonTraitInventory || typeof target.data.state.luckyMoonTraitInventory !== "object") target.data.state.luckyMoonTraitInventory = {};
-        if (!target.data.state.luckySoulboundTraitInventory || typeof target.data.state.luckySoulboundTraitInventory !== "object") target.data.state.luckySoulboundTraitInventory = {};
-        if (!target.data.state.specialLuckyTraitInventory || typeof target.data.state.specialLuckyTraitInventory !== "object") target.data.state.specialLuckyTraitInventory = {};
-
-        if (isSpecialBlock) {
-          const specialBucket = trait === "leprechaun" ? "specialLuckyTraitInventory" : "specialLuckyInventory";
-          if (!target.data.state[specialBucket][blockKey] || typeof target.data.state[specialBucket][blockKey] !== "object") {
-            target.data.state[specialBucket][blockKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
-          }
-          target.data.state[specialBucket][blockKey][mutation] = parsePositiveInt(target.data.state[specialBucket][blockKey][mutation] || 0, 0) + amount;
-        } else {
-          const bucket = trait === "leprechaun"
-            ? (mutation === "soulbound" ? "luckySoulboundTraitInventory" : (mutation === "bluemoon" ? "luckyMoonTraitInventory" : "luckyTraitInventory"))
-            : (mutation === "soulbound" ? "luckySoulboundInventory" : (mutation === "bluemoon" ? "luckyMoonInventory" : "luckyInventory"));
-          target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + amount;
-        }
-
-        await setPlayerDocMerge(targetPlayerId, { data: target.data, updatedAt: Date.now() }, decoded);
-        recipients += 1;
-        const giveId = `spawn-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const states = playerServerMap.get(targetPlayerId) || [];
-        for (const state of states) {
-          notifyPlayer(state, targetPlayerId, {
-            type: "admin-give",
-            giveId,
-            resource: "luckyblock",
-            rankKey: blockKey,
-            blockKey,
-            mutation,
-            trait,
-            amount,
-            stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
-            blueMoon: mutation === "bluemoon",
-            soulbound: mutation === "soulbound",
-            from: caller.profile?.username || playerTag(uid)
-          });
-        }
-      }
-
       res.json({
         ok: true,
         scope,
@@ -3648,8 +3657,8 @@ app.post("/api/admin/spawn", async (req, res) => {
         mutation,
         trait,
         amount,
-        spawned: recipients * amount,
-        recipients,
+        spawned,
+        recipients: 0,
         affectedServers: targets.length
       });
       return;
