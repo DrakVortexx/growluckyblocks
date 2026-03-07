@@ -9252,18 +9252,56 @@
       return total / Math.max(1, list.length);
     }
 
+    function buildLeprechaunFuseOdds(selectedCreatures) {
+      const outcomes = LEPRECHAUN_FUSE_OUTCOMES;
+      if (!Array.isArray(selectedCreatures) || selectedCreatures.length < 1) {
+        const equal = 1 / Math.max(1, outcomes.length);
+        return {
+          weights: outcomes.map(() => equal),
+          chances: outcomes.map(() => equal * 100)
+        };
+      }
+      const rankScores = selectedCreatures.map((c) => Math.max(0, RANKS.findIndex((r) => r.key === normalizeBlockKey(c?.rank?.key || c?.rankKey || "basic"))));
+      const avgRank = rankScores.reduce((a, b) => a + b, 0) / Math.max(1, rankScores.length);
+      const minRank = Math.min(...rankScores);
+      const maxRank = Math.max(...rankScores);
+      const mutationBoostAvg = selectedCreatures.reduce((sum, c) => sum + (normalizeMutation(c?.mutation || "normal") === "normal" ? 0 : 0.55), 0) / Math.max(1, selectedCreatures.length);
+      const traitBoostAvg = selectedCreatures.reduce((sum, c) => sum + (normalizeTrait(c?.trait || "none") === "leprechaun" ? 1.15 : 0), 0) / Math.max(1, selectedCreatures.length);
+      const hasLepTraitInput = selectedCreatures.some((c) => normalizeTrait(c?.trait || "none") === "leprechaun");
+
+      const quality = (avgRank * 0.72) + (minRank * 0.28) + mutationBoostAvg + traitBoostAvg;
+      const normalizedQuality = Math.max(0, Math.min(1, quality / Math.max(1, RANKS.length - 1)));
+      const targetIdx = Math.max(0, Math.min(outcomes.length - 1, normalizedQuality * (outcomes.length - 1)));
+      const sigma = Math.max(0.95, 2.6 - normalizedQuality * 1.35);
+      const upwardBiasPower = -0.45 + normalizedQuality * 1.9;
+
+      const weights = outcomes.map((_, i) => {
+        const dist = i - targetIdx;
+        const gaussian = Math.exp(-(dist * dist) / (2 * sigma * sigma));
+        const upwardBias = Math.pow((i + 1) / outcomes.length, upwardBiasPower);
+        return Math.max(1e-9, gaussian * upwardBias);
+      });
+
+      // Keep top outcome rare but progressively achievable with stronger input.
+      const topIdx = outcomes.length - 1;
+      const topScaleBase = 0.06 + (normalizedQuality * normalizedQuality * 1.65);
+      const topScale = topScaleBase
+        * (hasLepTraitInput ? 1.22 : 1)
+        * (maxRank >= 8 ? 1.14 : 1);
+      weights[topIdx] *= Math.max(0.04, Math.min(3.6, topScale));
+
+      const total = weights.reduce((sum, w) => sum + Math.max(1e-9, w), 0);
+      const chances = weights.map((w) => (Math.max(1e-9, w) / Math.max(1e-9, total)) * 100);
+      return { weights, chances };
+    }
+
     function rollLeprechaunFuseOutcome(selectedCreatures) {
-      const strength = computeFuseStrength(selectedCreatures);
-      const maxRank = Math.max(0, ...selectedCreatures.map((c) => Math.max(0, RANKS.findIndex((r) => r.key === normalizeBlockKey(c?.rank?.key || c?.rankKey || "basic")))));
-      const targetIdx = Math.max(0, Math.min(LEPRECHAUN_FUSE_OUTCOMES.length - 1, Math.floor((strength / Math.max(1, RANKS.length - 1)) * (LEPRECHAUN_FUSE_OUTCOMES.length - 1))));
-      const weights = LEPRECHAUN_FUSE_OUTCOMES.map((_, i) => 1 / (1 + Math.pow(i - targetIdx, 2)));
-      const topBase = maxRank >= 7 ? 0.05 : (maxRank >= 5 ? 0.02 : 0.005);
-      weights[weights.length - 1] *= topBase * (1 + Math.max(0, strength - 4) * 0.18);
-      let total = 0;
-      for (const w of weights) total += Math.max(0.000001, w);
-      let roll = Math.random() * total;
+      const odds = buildLeprechaunFuseOdds(selectedCreatures);
+      const weights = Array.isArray(odds?.weights) ? odds.weights : [];
+      const total = weights.reduce((sum, w) => sum + Math.max(1e-9, Number(w || 0)), 0);
+      let roll = Math.random() * Math.max(1e-9, total);
       for (let i = 0; i < weights.length; i += 1) {
-        roll -= Math.max(0.000001, weights[i]);
+        roll -= Math.max(1e-9, Number(weights[i] || 0));
         if (roll <= 0) return LEPRECHAUN_FUSE_OUTCOMES[i];
       }
       return LEPRECHAUN_FUSE_OUTCOMES[0];
@@ -9291,12 +9329,20 @@
       const unique = [...new Set(picked)];
       const selectedCreatures = unique.map((id) => creatures.find((c) => String(c.id) === id)).filter(Boolean);
       const strength = selectedCreatures.length >= 1 ? computeFuseStrength(selectedCreatures) : 0;
+      const odds = buildLeprechaunFuseOdds(selectedCreatures);
+      const chances = Array.isArray(odds?.chances) ? odds.chances : [];
       fuseInfoEl.textContent = list.length < 4
         ? "You need at least 4 creatures on pedestals."
         : "Select 4 creatures to fuse. Better creatures improve your odds.";
-      const topChance = Math.max(0.2, Math.min(22, (Math.max(0, strength - 4) * 2.1) + (selectedCreatures.some((c) => normalizeTrait(c.trait || "none") === "leprechaun") ? 3 : 0)));
-      fuseOddsEl.innerHTML = `Possible outcomes: 10 fixed creatures. <b>Leprechaun</b> result chance scales with quality (est. ${formatNumber(topChance)}%).`;
-      fuseDoEl.disabled = list.length < 4;
+      const rows = LEPRECHAUN_FUSE_OUTCOMES.map((o, idx) => {
+        const rank = getRankByKey(o.rankKey);
+        const pct = Number(chances[idx] || 0);
+        const badge = normalizeTrait(o.trait || "none") === "leprechaun" ? " [Leprechaun]" : "";
+        return `<div style="display:flex;justify-content:space-between;gap:8px"><span class="${rank.color}">${o.name}${badge}</span><span>${formatNumber(pct)}%</span></div>`;
+      }).join("");
+      const topChance = Number(chances[chances.length - 1] || 0);
+      fuseOddsEl.innerHTML = `<div style="margin-bottom:6px">Fuse quality: <b>${formatNumber(strength)}</b> | Leprechaun result: <b>${formatNumber(topChance)}%</b></div>${rows}`;
+      fuseDoEl.disabled = unique.length !== 4;
     }
 
     function toggleFusePanel(force = null) {
