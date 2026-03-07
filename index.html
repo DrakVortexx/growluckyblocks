@@ -1720,6 +1720,7 @@
     <button id="dockShop" class="dockBtn shop">Shop</button>
     <button id="dockRebirth" class="dockBtn rebirth">Rebirth</button>
     <button id="dockIndex" class="dockBtn index">Index</button>
+    <button id="dockFuse" class="dockBtn index">Fuse</button>
   </div>
   <div id="leftDock">
     <button id="dockCosmetics" class="dockBtn cosmetics">Cosmetics</button>
@@ -1757,7 +1758,7 @@
     <p><b>Inventory:</b> ` (backtick) or Tab</p>
     <p><b>Global Chat:</b> Y</p>
     <p><b>Open Shop:</b> Q (near Seed Shack)</p>
-    <p><b>Moon Wheel:</b> E (next to Seed Shack)</p>
+    <p><b>Leprechaun Wheel:</b> E (next to Seed Shack)</p>
     <p><b>Steal:</b> E near another player's block or creature pedestal</p>
     <p><b>Close Shop:</b> Esc</p>
   </div>
@@ -1839,7 +1840,7 @@
     </div>
     <div class="indexTabs">
       <button id="indexTabCreatures" class="indexTab active">Creatures</button>
-      <button id="indexTabBlueMoon" class="indexTab">Blue Moon</button>
+      <button id="indexTabBlueMoon" class="indexTab">Leprechaun</button>
     </div>
     <div id="indexSummary" style="font-size:12px;color:#d3e9fb;margin-bottom:8px"></div>
     <div id="indexList" class="indexList"></div>
@@ -1872,7 +1873,7 @@
           <option value="server">Server</option>
           <option value="global">Global</option>
         </select>
-        <button id="adminEventRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Blue Moon</button>
+        <button id="adminEventRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Frenzy</button>
       </div>
     </div>
     <div style="margin-bottom:12px">
@@ -1932,11 +1933,18 @@
           <option value="transcendent">Transcendent</option>
           <option value="omniversal">Omniversal</option>
           <option value="valentinesblock">Valentine's</option>
+          <option value="leprechaunblock">Leprechaun</option>
+          <option value="adminblock">Admin</option>
+          <option value="godlyblock">Godly Block</option>
         </select>
         <select id="adminSpawnBlockMutation" style="padding:4px">
           <option value="normal">Normal</option>
           <option value="bluemoon">Blue Moon</option>
           <option value="soulbound">Soulbound</option>
+        </select>
+        <select id="adminSpawnBlockTrait" style="padding:4px">
+          <option value="none">No Trait</option>
+          <option value="leprechaun">Leprechaun</option>
         </select>
         <select id="adminSpawnBlockScope" style="padding:4px">
           <option value="server">Server</option>
@@ -1977,7 +1985,7 @@
     </div>
   </div>
   <div id="wheelPanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:86;min-width:360px;padding:14px;">
-    <h3 style="margin:0 0 6px">Moon Wheel</h3>
+    <h3 style="margin:0 0 6px">Leprechaun Wheel</h3>
     <div id="wheelInfo" style="font-size:13px;color:#d9ecff;margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="wheelClose" class="btn">Close</button>
@@ -1990,6 +1998,21 @@
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="rebirthClose" class="btn">Close</button>
       <button id="rebirthDo" class="btn" style="background:rgba(245,162,76,.95);border-color:rgba(255,211,156,.7)">Rebirth</button>
+    </div>
+  </div>
+  <div id="fusePanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:86;min-width:430px;max-width:min(94vw,560px);padding:14px;">
+    <h3 style="margin:0 0 6px">Leprechaun Fuse</h3>
+    <div id="fuseInfo" style="font-size:13px;color:#d9ecff;margin-bottom:8px">Select 4 creatures to fuse.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <select id="fusePick1" style="padding:6px"></select>
+      <select id="fusePick2" style="padding:6px"></select>
+      <select id="fusePick3" style="padding:6px"></select>
+      <select id="fusePick4" style="padding:6px"></select>
+    </div>
+    <div id="fuseOdds" style="font-size:12px;color:#cce7ff;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="fuseClose" class="btn">Close</button>
+      <button id="fuseDo" class="btn" style="background:rgba(66,165,92,.9);border-color:rgba(160,240,175,.6)">Fuse 4</button>
     </div>
   </div>
   <div id="dailyPanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:87;min-width:430px;max-width:min(94vw,540px);padding:14px;">
@@ -2044,10 +2067,12 @@
     ];
     const SPECIAL_BLOCKS = [
       { key: "valentinesblock", label: "Valentine's Day", baseRankKey: "legendary", color: "c-epic" },
+      { key: "leprechaunblock", label: "Leprechaun", baseRankKey: "secret", color: "c-godly" },
       { key: "adminblock", label: "Admin", baseRankKey: "transcendent", color: "c-admin" },
       { key: "godlyblock", label: "Godly", baseRankKey: "omniversal", color: "c-godly" }
     ];
     const MUTATION_KEYS = ["normal", "bluemoon", "soulbound"];
+    const TRAIT_KEYS = ["none", "leprechaun"];
 
     const RANK_MULT = Object.fromEntries(RANKS.map((r, i) => [r.key, 1 + i * 0.28]));
     const OFFLINE_MONEY_FACTOR = 0.25;
@@ -2173,6 +2198,7 @@
     const dockShopBtn = document.getElementById("dockShop");
     const dockRebirthBtn = document.getElementById("dockRebirth");
     const dockIndexBtn = document.getElementById("dockIndex");
+    const dockFuseBtn = document.getElementById("dockFuse");
     const dockCosmeticsBtn = document.getElementById("dockCosmetics");
     const dockSettingsBtn = document.getElementById("dockSettings");
     const dockGuideBtn = document.getElementById("dockGuide");
@@ -2188,6 +2214,15 @@
     const rebirthInfoEl = document.getElementById("rebirthInfo");
     const rebirthCloseEl = document.getElementById("rebirthClose");
     const rebirthDoEl = document.getElementById("rebirthDo");
+    const fusePanelEl = document.getElementById("fusePanel");
+    const fuseInfoEl = document.getElementById("fuseInfo");
+    const fuseOddsEl = document.getElementById("fuseOdds");
+    const fusePick1El = document.getElementById("fusePick1");
+    const fusePick2El = document.getElementById("fusePick2");
+    const fusePick3El = document.getElementById("fusePick3");
+    const fusePick4El = document.getElementById("fusePick4");
+    const fuseCloseEl = document.getElementById("fuseClose");
+    const fuseDoEl = document.getElementById("fuseDo");
     const dailyPanelEl = document.getElementById("dailyPanel");
     const dailyInfoEl = document.getElementById("dailyInfo");
     const dailyRowsEl = document.getElementById("dailyRows");
@@ -2279,6 +2314,7 @@
     const adminSpawnBlockRunEl = document.getElementById("adminSpawnBlockRun");
     const adminSpawnBlockRankEl = document.getElementById("adminSpawnBlockRank");
     const adminSpawnBlockMutationEl = document.getElementById("adminSpawnBlockMutation");
+    const adminSpawnBlockTraitEl = document.getElementById("adminSpawnBlockTrait");
     const adminSpawnBlockScopeEl = document.getElementById("adminSpawnBlockScope");
     const adminSpawnBlockAmountEl = document.getElementById("adminSpawnBlockAmount");
     const adminResetRunEl = document.getElementById("adminResetRun");
@@ -2370,6 +2406,18 @@
     const INDEX_ENTRIES = RANKS.flatMap((rank) =>
       (CREATURE_NAMES_BY_RANK[rank.key] || []).map((name) => ({ rank, name }))
     );
+    const LEPRECHAUN_FUSE_OUTCOMES = [
+      { name: "Lucky Slime", rankKey: "basic", trait: "none" },
+      { name: "Mini Dragon", rankKey: "common", trait: "none" },
+      { name: "Ice Fox", rankKey: "rare", trait: "none" },
+      { name: "Hydra Dragon", rankKey: "epic", trait: "none" },
+      { name: "Golden Griffin", rankKey: "legendary", trait: "none" },
+      { name: "Celestial Cat", rankKey: "mythic", trait: "none" },
+      { name: "Omnisphinx", rankKey: "godly", trait: "none" },
+      { name: "Void Kraken", rankKey: "secret", trait: "none" },
+      { name: "Infinity Serpent", rankKey: "transcendent", trait: "none" },
+      { name: "Mystery Cat", rankKey: "omniversal", trait: "leprechaun" }
+    ];
     const SPECIAL_BLOCK_MAP = Object.fromEntries(SPECIAL_BLOCKS.map((s) => [s.key, s]));
 
     function emptyRankInventory() {
@@ -2394,6 +2442,12 @@
       return "normal";
     }
 
+    function normalizeTrait(v) {
+      const raw = String(v || "").trim().toLowerCase();
+      if (raw === "leprechaun" || raw === "lep" || raw === "lepricahaun" || raw === "leprichan" || raw === "leprechauntrait") return "leprechaun";
+      return "none";
+    }
+
     function mutationMultiplier(mutation) {
       const m = normalizeMutation(mutation);
       if (m === "bluemoon") return 6;
@@ -2401,11 +2455,27 @@
       return 1;
     }
 
+    function traitMultiplier(trait) {
+      const t = normalizeTrait(trait);
+      if (t === "leprechaun") return 4;
+      return 1;
+    }
+
+    function finalMultiplier(mutation, trait) {
+      return mutationMultiplier(mutation) * traitMultiplier(trait);
+    }
+
     function mutationBadge(mutation) {
       const m = normalizeMutation(mutation);
       if (m === "bluemoon") return "Blue Moon";
       if (m === "soulbound") return "Soulbound";
       return "Normal";
+    }
+
+    function traitBadge(trait) {
+      const t = normalizeTrait(trait);
+      if (t === "leprechaun") return "Leprechaun";
+      return "";
     }
 
     function mutationTint(mutation) {
@@ -2568,8 +2638,13 @@
       luckyMoonInventory: emptyRankInventory(),
       luckySoulboundInventory: emptyRankInventory(),
       specialLuckyInventory: emptySpecialInventory(),
+      luckyTraitInventory: emptyRankInventory(),
+      luckyMoonTraitInventory: emptyRankInventory(),
+      luckySoulboundTraitInventory: emptyRankInventory(),
+      specialLuckyTraitInventory: emptySpecialInventory(),
       selectedBlockKey: "basic",
       selectedBlockMutation: "normal",
+      selectedBlockTrait: "none",
       harvested: 0,
       totalCreatures: 0,
       dailyStreak: 0,
@@ -2792,10 +2867,9 @@
         rows.push({ icon: "🍀", value: formatClockSeconds(luckLeft), title: `Server Luck x${formatNumber(serverLuck)}` });
       }
       const moonInfo = blueMoonWindowInfo(nowSec);
-      // Only show the active Blue Moon countdown (do not show the countdown to the next Blue Moon)
+      // Only show the active Frenzy countdown
       if (moonInfo.active) {
-        // Clamp to 10 minutes visually if desired; otherwise show remaining secondsToEnd
-        rows.push({ icon: "🌙", value: formatClockSeconds(Math.max(0, Math.floor(Number(moonInfo.secondsToEnd || 0)))), title: "Blue Moon Active" });
+        rows.push({ icon: "🍀", value: formatClockSeconds(Math.max(0, Math.floor(Number(moonInfo.secondsToEnd || 0)))), title: "Leprechaun Frenzy Active" });
       }
       // Do not show Base Lock in the compact events/status timers per user request
       statusTimersEl.innerHTML = rows.map((row) => `
@@ -2838,6 +2912,9 @@
     function normalizeBlockKey(key) {
       const k = String(key || "").trim().toLowerCase();
       if (!k) return "basic";
+      if (k === "admin") return "adminblock";
+      if (k === "godly") return "godly";
+      if (k === "lepblock" || k === "leprechaunblock" || k === "leprechaun" || k === "lepricahaun" || k === "leprichan") return "leprechaunblock";
       if (k === "divine") return "transcendent";
       if (k === "eternal" || k === "eturnal") return "transcendent";
       if (k === "uncommon") return "common";
@@ -2879,30 +2956,47 @@
       return state.specialLuckyInventory[k];
     }
 
-    function markCreatureDiscovered(name, mutation = "normal") {
+    function specialTraitInventoryEntry(key) {
+      const k = normalizeBlockKey(key);
+      if (!state.specialLuckyTraitInventory || typeof state.specialLuckyTraitInventory !== "object") {
+        state.specialLuckyTraitInventory = emptySpecialInventory();
+      }
+      if (!state.specialLuckyTraitInventory[k] || typeof state.specialLuckyTraitInventory[k] !== "object") {
+        state.specialLuckyTraitInventory[k] = { normal: 0, bluemoon: 0, soulbound: 0 };
+      }
+      return state.specialLuckyTraitInventory[k];
+    }
+
+    function markCreatureDiscovered(name, mutation = "normal", trait = "none") {
       const key = String(name || "").trim();
       if (!key) return;
       const m = normalizeMutation(mutation);
       if (m === "soulbound") return;
       state.indexSeen[key] = true;
-      if (m === "bluemoon") state.indexBlueMoonSeen[key] = true;
+      if (normalizeTrait(trait) === "leprechaun") state.indexBlueMoonSeen[key] = true;
     }
 
-    function luckyCountByMutation(blockKey, mutation = "normal") {
+    function luckyCountByMutation(blockKey, mutation = "normal", trait = "none") {
       const key = normalizeBlockKey(blockKey);
       const m = normalizeMutation(mutation);
+      const t = normalizeTrait(trait);
       if (isSpecialBlockKey(key)) {
+        if (t === "leprechaun") return Number(specialTraitInventoryEntry(key)[m] || 0);
         return Number(specialInventoryEntry(key)[m] || 0);
       }
-      if (m === "bluemoon") return Number(state.luckyMoonInventory[key] || 0);
-      if (m === "soulbound") return Number(state.luckySoulboundInventory[key] || 0);
+      if (m === "bluemoon") return Number((t === "leprechaun" ? state.luckyMoonTraitInventory[key] : state.luckyMoonInventory[key]) || 0);
+      if (m === "soulbound") return Number((t === "leprechaun" ? state.luckySoulboundTraitInventory[key] : state.luckySoulboundInventory[key]) || 0);
+      if (t === "leprechaun") return Number(state.luckyTraitInventory[key] || 0);
       return Number(state.luckyInventory[key] || 0);
     }
 
     function luckyCount(blockKey) {
       return luckyCountByMutation(blockKey, "normal")
         + luckyCountByMutation(blockKey, "bluemoon")
-        + luckyCountByMutation(blockKey, "soulbound");
+        + luckyCountByMutation(blockKey, "soulbound")
+        + luckyCountByMutation(blockKey, "normal", "leprechaun")
+        + luckyCountByMutation(blockKey, "bluemoon", "leprechaun")
+        + luckyCountByMutation(blockKey, "soulbound", "leprechaun");
     }
 
     function luckyNormalCount(blockKey) {
@@ -2929,65 +3023,84 @@
       return pedestals.reduce((sum, p) => sum + ((p.hasBlock && normalizeBlockKey(p.blockRankKey) === key) ? 1 : 0), 0);
     }
 
-    function addLuckyBlock(blockKey, amount = 1, mutationOrBlueMoon = false) {
+    function addLuckyBlock(blockKey, amount = 1, mutationOrBlueMoon = false, traitOrNone = "none") {
       const key = normalizeBlockKey(blockKey);
       const mutation = typeof mutationOrBlueMoon === "string"
         ? normalizeMutation(mutationOrBlueMoon)
         : (mutationOrBlueMoon ? "bluemoon" : "normal");
+      const trait = normalizeTrait(traitOrNone);
       const delta = Math.max(0, Math.floor(Number(amount) || 0));
       if (!delta) return;
       if (isSpecialBlockKey(key)) {
-        const entry = specialInventoryEntry(key);
+        const entry = trait === "leprechaun" ? specialTraitInventoryEntry(key) : specialInventoryEntry(key);
         entry[mutation] = Math.max(0, Math.floor(Number(entry[mutation] || 0)) + delta);
+      } else if (mutation === "bluemoon" && trait === "leprechaun") {
+        state.luckyMoonTraitInventory[key] = (state.luckyMoonTraitInventory[key] || 0) + delta;
       } else if (mutation === "bluemoon") {
         state.luckyMoonInventory[key] = (state.luckyMoonInventory[key] || 0) + delta;
+      } else if (mutation === "soulbound" && trait === "leprechaun") {
+        state.luckySoulboundTraitInventory[key] = (state.luckySoulboundTraitInventory[key] || 0) + delta;
       } else if (mutation === "soulbound") {
         state.luckySoulboundInventory[key] = (state.luckySoulboundInventory[key] || 0) + delta;
+      } else if (trait === "leprechaun") {
+        state.luckyTraitInventory[key] = (state.luckyTraitInventory[key] || 0) + delta;
       } else {
         state.luckyInventory[key] = (state.luckyInventory[key] || 0) + delta;
       }
     }
 
-    function removeLuckyBlock(blockKey, amount = 1, preferredSource = "any") {
+    function removeLuckyBlock(blockKey, amount = 1, preferredSource = "any", preferredTrait = "any") {
       const key = normalizeBlockKey(blockKey);
       const take = Math.max(0, Math.floor(Number(amount) || 0));
       if (take < 1) return { ok: false, mutation: "normal", blueMoon: false };
       const preferred = preferredSource === "normal" ? "normal" : normalizeMutation(preferredSource);
+      const traitPref = preferredTrait === "leprechaun" ? ["leprechaun", "none"] : ["none", "leprechaun"];
       const order = preferred === "normal"
         ? ["normal"]
         : (preferred === "bluemoon" ? ["bluemoon", "soulbound", "normal"] : (preferred === "soulbound" ? ["soulbound", "bluemoon", "normal"] : ["soulbound", "bluemoon", "normal"]));
       for (const mutation of order) {
-        const have = luckyCountByMutation(key, mutation);
-        if (have < take) continue;
-        if (isSpecialBlockKey(key)) {
-          const entry = specialInventoryEntry(key);
-          entry[mutation] = have - take;
-        } else if (mutation === "bluemoon") {
-          state.luckyMoonInventory[key] = have - take;
-        } else if (mutation === "soulbound") {
-          state.luckySoulboundInventory[key] = have - take;
-        } else {
-          state.luckyInventory[key] = have - take;
+        for (const trait of traitPref) {
+          const have = luckyCountByMutation(key, mutation, trait);
+          if (have < take) continue;
+          if (isSpecialBlockKey(key)) {
+            const entry = trait === "leprechaun" ? specialTraitInventoryEntry(key) : specialInventoryEntry(key);
+            entry[mutation] = have - take;
+          } else if (mutation === "bluemoon" && trait === "leprechaun") {
+            state.luckyMoonTraitInventory[key] = have - take;
+          } else if (mutation === "bluemoon") {
+            state.luckyMoonInventory[key] = have - take;
+          } else if (mutation === "soulbound" && trait === "leprechaun") {
+            state.luckySoulboundTraitInventory[key] = have - take;
+          } else if (mutation === "soulbound") {
+            state.luckySoulboundInventory[key] = have - take;
+          } else if (trait === "leprechaun") {
+            state.luckyTraitInventory[key] = have - take;
+          } else {
+            state.luckyInventory[key] = have - take;
+          }
+          if (state.selectedBlockKey === key && luckyCount(key) === 0) {
+            const fallback = bestAvailableLuckySelection();
+            state.selectedBlockKey = fallback.key;
+            state.selectedBlockMutation = fallback.mutation;
+            state.selectedBlockTrait = fallback.trait;
+          }
+          return { ok: true, mutation, trait, blueMoon: mutation === "bluemoon", soulbound: mutation === "soulbound" };
         }
-        if (state.selectedBlockKey === key && luckyCount(key) === 0) {
-          const fallback = bestAvailableLuckySelection();
-          state.selectedBlockKey = fallback.key;
-          state.selectedBlockMutation = fallback.mutation;
-        }
-        return { ok: true, mutation, blueMoon: mutation === "bluemoon", soulbound: mutation === "soulbound" };
       }
-      return { ok: false, mutation: "normal", blueMoon: false, soulbound: false };
+      return { ok: false, mutation: "normal", trait: "none", blueMoon: false, soulbound: false };
     }
 
     function bestAvailableLuckySelection() {
       const allKeys = [...SPECIAL_BLOCKS.map((s) => s.key), ...RANKS.map((r) => r.key)];
       for (let i = allKeys.length - 1; i >= 0; i -= 1) {
         const key = allKeys[i];
-        for (const mutation of ["soulbound", "bluemoon", "normal"]) {
-          if (luckyCountByMutation(key, mutation) > 0) return { key, mutation };
+        for (const trait of ["leprechaun", "none"]) {
+          for (const mutation of ["soulbound", "bluemoon", "normal"]) {
+            if (luckyCountByMutation(key, mutation, trait) > 0) return { key, mutation, trait };
+          }
         }
       }
-      return { key: "basic", mutation: "normal" };
+      return { key: "basic", mutation: "normal", trait: "none" };
     }
 
     function bestAvailableLuckyKey() {
@@ -3413,7 +3526,9 @@
       if (!pedestal.blockRankKey) return;
       const mat = blockMaterialForRank(pedestal.blockRankKey);
       const mutation = normalizeMutation(pedestal.blockMutation || (pedestal.blockBlueMoon ? "bluemoon" : "normal"));
+      const trait = normalizeTrait(pedestal.blockTrait || "none");
       pedestal.blockMutation = mutation;
+      pedestal.blockTrait = trait;
       pedestal.blockBlueMoon = mutation === "bluemoon";
       pedestal.block.userData.blockMutation = mutation;
       pedestal.block.material.color.setHex(mat.color);
@@ -3435,8 +3550,9 @@
       const blockMeta = blockMetaByKey(pedestal.blockRankKey);
       const modelRankKey = normalizeBlockKey(blockMeta.rankForFx || pedestal.blockRankKey || "basic");
       applyRankBlockModelToHost(pedestal.block, modelRankKey, mutation);
-      if (mutation !== "normal") {
-        setMeshLabel(pedestal.block, `${blockMeta.label}`, "Lucky Block", mutationBadge(mutation), mutationTint(mutation));
+      const line3 = `${mutation !== "normal" ? mutationBadge(mutation) : ""}${trait === "leprechaun" ? `${mutation !== "normal" ? " • " : ""}Leprechaun` : ""}`;
+      if (line3) {
+        setMeshLabel(pedestal.block, `${trait === "leprechaun" ? "[Leprechaun] " : ""}${blockMeta.label}`, "Lucky Block", line3, mutationTint(mutation));
       } else {
         setMeshLabel(pedestal.block, `${blockMeta.label}`, "Lucky Block");
       }
@@ -3582,14 +3698,14 @@
       return growRangeForRank(rank.key);
     }
 
-    function fixedCreatureRateForCreature(rankKey, creatureName = "", mutation = "normal") {
+    function fixedCreatureRateForCreature(rankKey, creatureName = "", mutation = "normal", trait = "none") {
       const rank = getRankByKey(rankKey);
       const key = String(creatureName || "").trim().toLowerCase();
       let base = Number(CREATURE_RATE_BY_NAME[key] || 0);
       if (base <= 0) base = Math.max(1, Number(rank.min || 1)) * Number(RANK_MULT[rank.key] || 1);
-      const scaled = Number(base) * mutationMultiplier(mutation);
+      const scaled = Number(base) * finalMultiplier(mutation, trait);
       if (!Number.isFinite(scaled) || scaled <= 0) {
-        const fallback = Math.max(1, Number(rank.min || 1)) * Number(RANK_MULT[rank.key] || 1);
+        const fallback = Math.max(1, Number(rank.min || 1)) * Number(RANK_MULT[rank.key] || 1) * finalMultiplier(mutation, trait);
         return Math.max(1, Math.floor(fallback));
       }
       return Math.max(1, Math.floor(scaled));
@@ -3863,7 +3979,7 @@
       tutorialArrowEl.style.top = `${screen.y - 28}px`;
     }
 
-    function blueMoonWindowInfo(nowSec = realNowSec()) {
+    function leprechaunFrenzyInfo(nowSec = realNowSec()) {
       const forcedUntil = Number(multiplayer.forcedBlueMoonUntil || 0);
       if (forcedUntil > nowSec) {
         const forcedId = String(multiplayer.forcedBlueMoonEventId || `forced-${Math.floor(forcedUntil)}`);
@@ -3896,22 +4012,25 @@
       };
     }
 
-    function isBlueMoonActive() {
-      return blueMoonWindowInfo().active;
+    function isLeprechaunFrenzyActive() {
+      return leprechaunFrenzyInfo().active;
     }
 
     function wheelSecondsUntilSpin() {
-      return blueMoonWindowInfo().secondsToStart;
+      return leprechaunFrenzyInfo().secondsToStart;
     }
 
     function wheelSecondsLeftThisEvent() {
-      return blueMoonWindowInfo().secondsToEnd;
+      return leprechaunFrenzyInfo().secondsToEnd;
     }
 
     function canSpinWheel() {
-      const info = blueMoonWindowInfo();
+      const info = leprechaunFrenzyInfo();
       return info.active && String(state.lastSpinWindow || "") !== String(info.windowId);
     }
+    // Back-compat alias
+    const blueMoonWindowInfo = leprechaunFrenzyInfo;
+    const isBlueMoonActive = isLeprechaunFrenzyActive;
 
     function saveSettings() {
       try {
@@ -3970,6 +4089,7 @@
       if (open) {
         indexPanelEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
+        toggleFusePanel(false);
         closeRebirthPanel();
         closeDailyPanel();
         document.exitPointerLock();
@@ -3989,6 +4109,7 @@
         || settingsPanelEl?.classList.contains("open")
         || sellCreatureModalEl.style.display !== "none"
         || rebirthPanelEl.style.display !== "none"
+        || fusePanelEl.style.display !== "none"
         || wheelPanelEl.style.display !== "none"
         || dailyPanelEl.style.display !== "none";
     }
@@ -4099,6 +4220,7 @@
         p.seedRank = null;
         p.seedRollValue = 0;
         p.blueMoon = false;
+        p.leprechaunTrait = false;
         p.plantedAt = 0;
         p.growDuration = 0;
         p.sprout.visible = false;
@@ -4109,6 +4231,7 @@
         p.blockRankKey = null;
         p.blockBlueMoon = false;
         p.blockMutation = "normal";
+        p.blockTrait = "none";
         p.creatureId = "";
         p.openingUntil = 0;
         p.block.visible = false;
@@ -4125,10 +4248,15 @@
       for (const r of RANKS) state.luckyInventory[r.key] = 0;
       for (const r of RANKS) state.luckyMoonInventory[r.key] = 0;
       for (const r of RANKS) state.luckySoulboundInventory[r.key] = 0;
+      for (const r of RANKS) state.luckyTraitInventory[r.key] = 0;
+      for (const r of RANKS) state.luckyMoonTraitInventory[r.key] = 0;
+      for (const r of RANKS) state.luckySoulboundTraitInventory[r.key] = 0;
       state.specialLuckyInventory = emptySpecialInventory();
+      state.specialLuckyTraitInventory = emptySpecialInventory();
       state.luckyInventory.basic = 2;
       state.selectedBlockKey = "basic";
       state.selectedBlockMutation = "normal";
+      state.selectedBlockTrait = "none";
       state.money = 120;
       state.seeds = 7;
       state.harvested = 0;
@@ -4304,6 +4432,12 @@
         if (v < 0.90) return getRankByKey("secret");
         return getRankByKey("transcendent");
       }
+      if (blockMeta.isSpecial && blockMeta.key === "leprechaunblock") {
+        const v = Math.random();
+        if (v < 0.50) return getRankByKey("secret");
+        if (v < 0.85) return getRankByKey("transcendent");
+        return getRankByKey("omniversal");
+      }
       // Admin and Godly blocks cannot be opened through normal gameplay
       if (blockMeta.isSpecial && (blockMeta.key === "adminblock" || blockMeta.key === "godlyblock")) {
         // These blocks can only be obtained via admin commands, return a high-tier reward
@@ -4313,8 +4447,11 @@
       }
       const seedKey = blockMeta.isSpecial ? blockMeta.rankForFx : blockMeta.key;
       const idx = Math.max(0, RANKS.findIndex((r) => r.key === seedKey));
-      if (Math.random() < 0.9 || idx >= RANKS.length - 1) return RANKS[idx];
-      return RANKS[Math.min(RANKS.length - 1, idx + 1)];
+      if (idx >= RANKS.length - 1) return RANKS[idx];
+      if (seedKey === "secret" && Math.random() < 0.05) return getRankByKey("transcendent");
+      if (seedKey === "transcendent" && Math.random() < 0.01) return getRankByKey("omniversal");
+      if (Math.random() < 0.10) return RANKS[Math.min(RANKS.length - 1, idx + 1)];
+      return RANKS[idx];
     }
 
     function getRankByKey(key) {
@@ -4753,6 +4890,7 @@
         toggleCosmeticsPanel(false);
         toggleShop(false);
         toggleInventory(false);
+        toggleFusePanel(false);
         document.exitPointerLock();
         adminConsoleInputEl?.focus();
       }
@@ -4765,6 +4903,7 @@
       if (open) {
         indexPanelEl.classList.remove("open");
         settingsPanelEl.classList.remove("open");
+        toggleFusePanel(false);
         closeRebirthPanel();
         closeDailyPanel();
         renderChat();
@@ -4812,7 +4951,7 @@
           const arg3 = String(parts[2] || "").trim().toLowerCase();
           const arg4 = String(parts[3] || "").trim().toLowerCase();
           if (!eventName) {
-            state.info = "Usage: event bluemoon [server|global] [seconds]";
+            state.info = "Usage: event leprechaunfrenzy [server|global] [seconds]";
             return;
           }
           const scope = arg3 === "global" || arg4 === "global"
@@ -4829,8 +4968,8 @@
           }, token);
           multiplayer.forcedBlueMoonUntil = Number(data.forcedBlueMoonUntil || multiplayer.forcedBlueMoonUntil || 0);
           multiplayer.forcedBlueMoonEventId = String(data.forcedBlueMoonEventId || multiplayer.forcedBlueMoonEventId || "");
-          state.info = `Blue Moon triggered (${scope}) for ${formatDuration(durationSec)}.`;
-          state.info = `Admin command: Blue Moon started (${scope})`;
+          state.info = `Leprechaun Frenzy triggered (${scope}) for ${formatDuration(durationSec)}.`;
+          state.info = `Admin command: Leprechaun Frenzy started (${scope})`;
           updateUI();
           return;
         }
@@ -4873,23 +5012,26 @@
             state.info = "Usage: give <username> <rarity|valentinesblock> <amount> [mutation]";
             return;
           }
+          const requestedTrait = normalizeTrait(a4 || "none");
           const data = await apiJson("/api/admin/give", "POST", {
             serverId: multiplayer.serverId,
             username,
             rankKey: blockKey,
             amount,
-            mutation
+            mutation,
+            trait: requestedTrait
           }, token);
           const grantedKey = normalizeBlockKey(String(data.blockKey || data.rankKey || blockKey));
           const grantedMutation = normalizeMutation(data.mutation || mutation);
+          const grantedTrait = normalizeTrait(data.trait || requestedTrait || "none");
           if (data.giveId && (data.targetPlayerId === multiplayer.playerId || String(username).toLowerCase() === String(multiplayer.profile.username || "").toLowerCase())) {
             pendingAdminGiveIds.add(String(data.giveId));
-            addLuckyBlock(grantedKey, Number(data.amount || amount), grantedMutation);
+            addLuckyBlock(grantedKey, Number(data.amount || amount), grantedMutation, grantedTrait);
             updateUI();
           }
           const grantedMeta = blockMetaByKey(grantedKey);
-          state.info = `Gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`} block(s) to ${username}.`;
-          state.info = `Admin command: gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`} block(s) to ${username}`;
+          state.info = `Gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`}${grantedTrait === "leprechaun" ? " [Leprechaun]" : ""} block(s) to ${username}.`;
+          state.info = `Admin command: gave ${data.amount} ${grantedMeta.label}${grantedMutation === "normal" ? "" : ` ${mutationBadge(grantedMutation)}`}${grantedTrait === "leprechaun" ? " [Leprechaun]" : ""} block(s) to ${username}`;
           return;
         }
         if (head === "spawn") {
@@ -4934,23 +5076,37 @@
           const a3 = String(parts[2] || "").trim().toLowerCase();
           const a4 = String(parts[3] || "").trim().toLowerCase();
           const a5 = String(parts[4] || "").trim().toLowerCase();
+          const a6 = String(parts[5] || "").trim().toLowerCase();
           let scope = "server";
           let amount = 1;
           let mutation = "normal";
+          let trait = "none";
           if (!blockKey) {
-            state.info = "Usage: spawnblock <rarity|valentinesblock> server|global [amount] [mutation]";
+            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait]";
             return;
           }
+          const parseModToken = (token) => {
+            const raw = String(token || "").trim().toLowerCase();
+            if (!raw) return;
+            const parsedTrait = normalizeTrait(raw);
+            if (parsedTrait !== "none") {
+              trait = parsedTrait;
+              return;
+            }
+            mutation = normalizeMutation(raw);
+          };
           if (a3 === "server" || a3 === "global") {
             scope = a3;
             if (Number.isFinite(Number(a4)) && Number(a4) >= 1) {
               amount = Math.max(1, Math.floor(Number(a4)));
-              mutation = normalizeMutation(a5 || "normal");
+              parseModToken(a5 || "normal");
+              parseModToken(a6 || "");
             } else {
-              mutation = normalizeMutation(a4 || "normal");
+              parseModToken(a4 || "normal");
+              parseModToken(a5 || "");
             }
           } else {
-            state.info = "Usage: spawnblock <rarity|valentinesblock> server|global [amount] [mutation]";
+            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait]";
             return;
           }
           const data = await apiJson("/api/admin/spawn", "POST", {
@@ -4958,11 +5114,13 @@
             scope,
             amount,
             blockKey,
-            mutation
+            mutation,
+            trait
           }, token);
           const spawnedBlockMeta = blockMetaByKey(data?.blockKey || blockKey);
           const spawnedMutation = normalizeMutation(data?.mutation || mutation);
-          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`} block(s) to ${formatNumber(Number(data?.recipients || 0))} player(s) (${scope}).`;
+          const spawnedTrait = normalizeTrait(data?.trait || trait);
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`}${spawnedTrait === "leprechaun" ? " [Leprechaun]" : ""} block(s) to ${formatNumber(Number(data?.recipients || 0))} player(s) (${scope}).`;
           return;
         }
         if (head === "reset") {
@@ -5144,8 +5302,13 @@
           luckyMoonInventory: state.luckyMoonInventory,
           luckySoulboundInventory: state.luckySoulboundInventory,
           specialLuckyInventory: state.specialLuckyInventory,
+          luckyTraitInventory: state.luckyTraitInventory,
+          luckyMoonTraitInventory: state.luckyMoonTraitInventory,
+          luckySoulboundTraitInventory: state.luckySoulboundTraitInventory,
+          specialLuckyTraitInventory: state.specialLuckyTraitInventory,
           selectedBlockKey: state.selectedBlockKey,
           selectedBlockMutation: state.selectedBlockMutation,
+          selectedBlockTrait: state.selectedBlockTrait,
           harvested: state.harvested,
           totalCreatures: state.totalCreatures,
           rebirths: state.rebirths,
@@ -5186,13 +5349,15 @@
           growDuration: p.growDuration,
           seedRankKey: p.seedRank ? p.seedRank.key : null,
           seedRollValue: p.seedRollValue,
-          blueMoon: !!p.blueMoon
+          blueMoon: !!p.blueMoon,
+          leprechaunTrait: !!p.leprechaunTrait
         })),
         pedestals: pedestals.map((p) => ({
           hasBlock: p.hasBlock,
           blockRankKey: p.blockRankKey || null,
           blockBlueMoon: !!p.blockBlueMoon,
           blockMutation: normalizeMutation(p.blockMutation || (p.blockBlueMoon ? "bluemoon" : "normal")),
+          blockTrait: normalizeTrait(p.blockTrait || "none"),
           creatureId: p.creatureId || null
         })),
         creatures: creatures.map((c) => ({
@@ -5202,6 +5367,7 @@
           rate: c.rate,
           blueMoon: !!c.blueMoon,
           mutation: normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal")),
+          trait: normalizeTrait(c.trait || "none"),
           pedestalId: c.pedestalId || null
         }))
       };
@@ -5215,13 +5381,15 @@
           plantedAt: p.plantedAt,
           growDuration: p.growDuration,
           seedRankKey: p.seedRank ? p.seedRank.key : null,
-          blueMoon: !!p.blueMoon
+          blueMoon: !!p.blueMoon,
+          leprechaunTrait: !!p.leprechaunTrait
         })),
         pedestals: pedestals.map((p) => ({
           hasBlock: p.hasBlock,
           blockRankKey: p.blockRankKey || null,
           blockBlueMoon: !!p.blockBlueMoon,
           blockMutation: normalizeMutation(p.blockMutation || (p.blockBlueMoon ? "bluemoon" : "normal")),
+          blockTrait: normalizeTrait(p.blockTrait || "none"),
           creatureId: p.creatureId || null
         })),
         creatures: creatures.map((c) => ({
@@ -5231,6 +5399,7 @@
           rate: c.rate,
           blueMoon: !!c.blueMoon,
           mutation: normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal")),
+          trait: normalizeTrait(c.trait || "none"),
           pedestalId: c.pedestalId || null
         }))
       };
@@ -5354,6 +5523,30 @@
       } else {
         for (const r of RANKS) state.luckySoulboundInventory[r.key] = 0;
       }
+      if (loaded.luckyTraitInventory && typeof loaded.luckyTraitInventory === "object") {
+        for (const r of RANKS) {
+          const v = Number(loaded.luckyTraitInventory[r.key] || 0);
+          state.luckyTraitInventory[r.key] = Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+        }
+      } else {
+        for (const r of RANKS) state.luckyTraitInventory[r.key] = 0;
+      }
+      if (loaded.luckyMoonTraitInventory && typeof loaded.luckyMoonTraitInventory === "object") {
+        for (const r of RANKS) {
+          const v = Number(loaded.luckyMoonTraitInventory[r.key] || 0);
+          state.luckyMoonTraitInventory[r.key] = Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+        }
+      } else {
+        for (const r of RANKS) state.luckyMoonTraitInventory[r.key] = 0;
+      }
+      if (loaded.luckySoulboundTraitInventory && typeof loaded.luckySoulboundTraitInventory === "object") {
+        for (const r of RANKS) {
+          const v = Number(loaded.luckySoulboundTraitInventory[r.key] || 0);
+          state.luckySoulboundTraitInventory[r.key] = Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+        }
+      } else {
+        for (const r of RANKS) state.luckySoulboundTraitInventory[r.key] = 0;
+      }
       state.specialLuckyInventory = emptySpecialInventory();
       if (loaded.specialLuckyInventory && typeof loaded.specialLuckyInventory === "object") {
         for (const s of SPECIAL_BLOCKS) {
@@ -5365,18 +5558,33 @@
           };
         }
       }
+      state.specialLuckyTraitInventory = emptySpecialInventory();
+      if (loaded.specialLuckyTraitInventory && typeof loaded.specialLuckyTraitInventory === "object") {
+        for (const s of SPECIAL_BLOCKS) {
+          const row = loaded.specialLuckyTraitInventory[s.key] || {};
+          state.specialLuckyTraitInventory[s.key] = {
+            normal: Math.max(0, Math.floor(Number(row.normal || 0))),
+            bluemoon: Math.max(0, Math.floor(Number(row.bluemoon || 0))),
+            soulbound: Math.max(0, Math.floor(Number(row.soulbound || 0)))
+          };
+        }
+      }
+      state.selectedBlockTrait = normalizeTrait(loaded.selectedBlockTrait || "none");
       if (typeof loaded.selectedBlockKey === "string") {
         state.selectedBlockKey = normalizeBlockKey(loaded.selectedBlockKey);
         state.selectedBlockMutation = normalizeMutation(loaded.selectedBlockMutation || "normal");
+        state.selectedBlockTrait = normalizeTrait(loaded.selectedBlockTrait || "none");
       } else if (totalLuckyBlocks() > 0 && luckyCount(state.selectedBlockKey) < 1) {
         const best = bestAvailableLuckySelection();
         state.selectedBlockKey = best.key;
         state.selectedBlockMutation = best.mutation;
+        state.selectedBlockTrait = best.trait;
       }
-      if (luckyCountByMutation(state.selectedBlockKey, state.selectedBlockMutation) < 1 && totalLuckyBlocks() > 0) {
+      if (luckyCountByMutation(state.selectedBlockKey, state.selectedBlockMutation, state.selectedBlockTrait || "none") < 1 && totalLuckyBlocks() > 0) {
         const best = bestAvailableLuckySelection();
         state.selectedBlockKey = best.key;
         state.selectedBlockMutation = best.mutation;
+        state.selectedBlockTrait = best.trait;
       }
 
       const doneById = new Map((loaded.quests || []).map((q) => [q.id, !!q.done]));
@@ -5396,6 +5604,7 @@
           p.seedRank = null;
           p.seedRollValue = 0;
           p.blueMoon = false;
+          p.leprechaunTrait = false;
           p.sprout.visible = false;
           p.fruit.visible = false;
           continue;
@@ -5405,12 +5614,13 @@
         p.plantedAt = typeof saved.plantedAt === "number" ? saved.plantedAt : 0;
         p.seedRollValue = typeof saved.seedRollValue === "number" ? saved.seedRollValue : 1;
         p.blueMoon = !!saved.blueMoon;
+        p.leprechaunTrait = !!saved.leprechaunTrait;
         p.seedRank = saved.seedRankKey ? getRankByKey(saved.seedRankKey) : getRankByKey("basic");
         p.growDuration = typeof saved.growDuration === "number" ? saved.growDuration : growDurationForRank(p.seedRank.key);
         p.sprout.visible = true;
-        p.sprout.material.color.setHex(p.blueMoon ? 0x5da8ff : rankHex(p.seedRank.key));
+        p.sprout.material.color.setHex(p.leprechaunTrait ? 0x41c25e : rankHex(p.seedRank.key));
         p.fruit.visible = p.stage === 2;
-        p.fruit.material.color.setHex(p.blueMoon ? 0x5da8ff : rankHex(p.seedRank.key));
+        p.fruit.material.color.setHex(p.leprechaunTrait ? 0x41c25e : rankHex(p.seedRank.key));
       }
 
       const loadedPedestals = (Array.isArray(payload.pedestals) ? payload.pedestals : []).slice(0, PEDESTALS_PER_FLOOR);
@@ -5422,10 +5632,12 @@
         const hasBlock = !!savedPed.hasBlock;
         const blockRankKey = normalizeBlockKey(savedPed.blockRankKey || "basic");
         const blockMutation = normalizeMutation(savedPed.blockMutation || (savedPed.blockBlueMoon ? "bluemoon" : "normal"));
+        const blockTrait = normalizeTrait(savedPed.blockTrait || "none");
         pedestals[i].hasBlock = hasBlock;
         pedestals[i].block.visible = hasBlock;
         pedestals[i].blockRankKey = hasBlock ? blockRankKey : null;
         pedestals[i].blockMutation = hasBlock ? blockMutation : "normal";
+        pedestals[i].blockTrait = hasBlock ? blockTrait : "none";
         pedestals[i].blockBlueMoon = hasBlock ? blockMutation === "bluemoon" : false;
         pedestals[i].creatureId = "";
         pedestals[i].openingUntil = 0;
@@ -5446,10 +5658,11 @@
         const creatureName = String(saved.name || "");
         if (!isValidCreatureNameForRank(rank.key, creatureName)) continue;
         const mutation = normalizeMutation(saved.mutation || (saved.blueMoon ? "bluemoon" : "normal"));
+        const trait = normalizeTrait(saved.trait || "none");
         const savedRate = Number(saved.rate);
         const rate = (Number.isFinite(savedRate) && savedRate > 0)
           ? savedRate
-          : fixedCreatureRateForCreature(rank.key, creatureName, mutation);
+          : fixedCreatureRateForCreature(rank.key, creatureName, mutation, trait);
         const targetPedestal = saved.pedestalId ? getPedestalById(saved.pedestalId) : findFreeCreaturePedestal();
         if (!targetPedestal || targetPedestal.creatureId) continue;
         if (targetPedestal.hasBlock) {
@@ -5460,7 +5673,7 @@
           targetPedestal.block.visible = false;
           clearMeshLabel(targetPedestal.block);
         }
-        spawnCreatureOnPedestal(rank, rate, targetPedestal, creatureName, { mutation, id: String(saved.id || "") });
+        spawnCreatureOnPedestal(rank, rate, targetPedestal, creatureName, { mutation, trait, id: String(saved.id || "") });
       }
       applyOfflineProgress(payload);
     }
@@ -5635,13 +5848,13 @@
       const pedestals = Array.isArray(snapshot.pedestals) ? snapshot.pedestals : [];
       const creatures = Array.isArray(snapshot.creatures) ? snapshot.creatures : [];
       const plotSig = plots
-        .map((p) => `${Number(p?.stage || 0)}:${String(p?.seedRankKey || "")}:${p?.blueMoon ? 1 : 0}`)
+        .map((p) => `${Number(p?.stage || 0)}:${String(p?.seedRankKey || "")}:${p?.blueMoon ? 1 : 0}:${p?.leprechaunTrait ? 1 : 0}`)
         .join(",");
       const pedSig = pedestals
-        .map((p) => `${p?.hasBlock ? 1 : 0}:${String(p?.blockRankKey || "")}:${String(p?.blockMutation || "")}:${String(p?.creatureId || "")}`)
+        .map((p) => `${p?.hasBlock ? 1 : 0}:${String(p?.blockRankKey || "")}:${String(p?.blockMutation || "")}:${String(p?.blockTrait || "")}:${String(p?.creatureId || "")}`)
         .join(",");
       const creatureSig = creatures
-        .map((c) => `${String(c?.id || "")}:${String(c?.pedestalId || "")}:${String(c?.rankKey || "")}:${String(c?.mutation || "")}:${Math.floor(Number(c?.rate || 0))}`)
+        .map((c) => `${String(c?.id || "")}:${String(c?.pedestalId || "")}:${String(c?.rankKey || "")}:${String(c?.mutation || "")}:${String(c?.trait || "")}:${Math.floor(Number(c?.rate || 0))}`)
         .sort()
         .join(",");
       return `${plotSig}|${pedSig}|${creatureSig}`;
@@ -5769,11 +5982,11 @@
             if (stage < 1) continue;
             const pos = remotePlotPositionByIndex(i, slot);
             const rankKey = getRankByKey(pl?.seedRankKey || "basic").key;
-            const isMoon = !!pl?.blueMoon;
+            const hasLepTrait = !!pl?.leprechaunTrait;
 
             const sprout = new THREE.Mesh(
               new THREE.ConeGeometry(0.25, 0.95, 8),
-              new THREE.MeshStandardMaterial({ color: isMoon ? 0x5da8ff : rankHex(rankKey) })
+              new THREE.MeshStandardMaterial({ color: hasLepTrait ? 0x41c25e : rankHex(rankKey) })
             );
             sprout.position.set(pos.x, 0.74, pos.z);
             sprout.castShadow = true;
@@ -5782,7 +5995,7 @@
 
             const fruit = new THREE.Mesh(
               new THREE.SphereGeometry(0.25, 10, 10),
-              new THREE.MeshStandardMaterial({ color: isMoon ? 0x5da8ff : rankHex(rankKey) })
+              new THREE.MeshStandardMaterial({ color: hasLepTrait ? 0x41c25e : rankHex(rankKey) })
             );
             fruit.position.set(pos.x, 1.12, pos.z);
             fruit.castShadow = true;
@@ -5814,6 +6027,7 @@
           if (creatureSnap) {
             const rankKey = getRankByKey(normalizeBlockKey(creatureSnap.rankKey || "basic")).key;
             const mutation = normalizeMutation(creatureSnap.mutation || (creatureSnap.blueMoon ? "bluemoon" : "normal"));
+            const trait = normalizeTrait(creatureSnap.trait || "none");
             const isMoon = mutation === "bluemoon";
             const isSoulbound = mutation === "soulbound";
             const mesh = createCreatureMesh(rankKey, String(creatureSnap.name || "Creature"));
@@ -5829,7 +6043,7 @@
             applyMutationFx(mesh, mutation, true);
             const r = getRankByKey(rankKey);
             const rateText = Number.isFinite(Number(creatureSnap.rate)) ? `${formatMoney(Number(creatureSnap.rate))}/s` : "";
-            setMeshLabel(mesh, r.label, String(creatureSnap.name || "Creature"), `${rateText}${mutation === "normal" ? "" : ` [${mutationBadge(mutation)}]`}`, mutationTint(mutation));
+            setMeshLabel(mesh, `${trait === "leprechaun" ? "[Leprechaun] " : ""}${r.label}`, String(creatureSnap.name || "Creature"), `${rateText}${mutation === "normal" ? "" : ` [${mutationBadge(mutation)}]`}`, mutationTint(mutation));
             scene.add(mesh);
             remoteDetailMeshes.push(mesh);
             remoteCreatureFxMeshes.push({ mesh, baseY: 1.24, phase: Math.random() * Math.PI * 2 });
@@ -5843,6 +6057,7 @@
               new THREE.MeshStandardMaterial({ color: rankHex(blockMeta.rankForFx), emissive: rankHex(blockMeta.rankForFx), emissiveIntensity: 0.3 })
             );
             const blockMutation = normalizeMutation(pedSnap[i]?.blockMutation || (pedSnap[i]?.blockBlueMoon ? "bluemoon" : "normal"));
+            const blockTrait = normalizeTrait(pedSnap[i]?.blockTrait || "none");
             if (blockMutation === "bluemoon") {
               block.material.color.setHex(0x6aaeff);
               block.material.emissive.setHex(0x4f93ff);
@@ -5856,7 +6071,8 @@
             applyRankBlockModelToHost(block, normalizeBlockKey(blockMeta.rankForFx || blockKey || "basic"), blockMutation);
             block.position.set(pos.x, 1.1, pos.z);
             block.castShadow = true;
-            setMeshLabel(block, blockMeta.label, "Lucky Block", blockMutation === "normal" ? "" : mutationBadge(blockMutation), mutationTint(blockMutation));
+            const blockLine3 = `${blockMutation === "normal" ? "" : mutationBadge(blockMutation)}${blockTrait === "leprechaun" ? `${blockMutation === "normal" ? "" : " • "}Leprechaun` : ""}`;
+            setMeshLabel(block, `${blockTrait === "leprechaun" ? "[Leprechaun] " : ""}${blockMeta.label}`, "Lucky Block", blockLine3, mutationTint(blockMutation));
             scene.add(block);
             remoteDetailMeshes.push(block);
             remoteBlockFxMeshes.push({
@@ -6157,6 +6373,7 @@
       const itemType = String(raw.itemType || "block") === "creature" ? "creature" : "block";
       const blockKey = normalizeBlockKey(raw.blockKey || raw.blockRankKey || "basic");
       const mutation = normalizeMutation(raw.mutation || "normal");
+      const trait = normalizeTrait(raw.trait || "none");
       const sourcePedestalIndex = clampLocalPedestalIndex(raw.sourcePedestalIndex || 0);
       const creatureRaw = raw.creature && typeof raw.creature === "object" ? raw.creature : null;
       const creature = creatureRaw ? {
@@ -6164,7 +6381,8 @@
         name: String(creatureRaw.name || "Creature"),
         rankKey: normalizeBlockKey(creatureRaw.rankKey || blockKey),
         rate: Math.max(1, Number(creatureRaw.rate || 1)),
-        mutation: normalizeMutation(creatureRaw.mutation || mutation)
+        mutation: normalizeMutation(creatureRaw.mutation || mutation),
+        trait: normalizeTrait(creatureRaw.trait || trait)
       } : null;
       return {
         id: String(raw.id || ""),
@@ -6174,6 +6392,7 @@
         itemType,
         blockKey,
         mutation,
+        trait,
         sourcePedestalIndex,
         sourcePedestalId: String(raw.sourcePedestalId || pedestalIdForIndex(sourcePedestalIndex)),
         creature,
@@ -6185,10 +6404,11 @@
       const carry = normalizeCarriedPayload(carryObj);
       if (!carry) return "stolen item";
       if (carry.itemType === "creature") {
-        return String(carry.creature?.name || "stolen creature");
+        const traitPrefix = normalizeTrait(carry.creature?.trait || carry.trait || "none") === "leprechaun" ? "[Leprechaun] " : "";
+        return `${traitPrefix}${String(carry.creature?.name || "stolen creature")}`;
       }
       const meta = blockMetaByKey(carry.blockKey || "basic");
-      return `${meta.label}${carry.mutation === "normal" ? "" : ` ${mutationBadge(carry.mutation)}`} block`;
+      return `${meta.label}${carry.mutation === "normal" ? "" : ` ${mutationBadge(carry.mutation)}`}${normalizeTrait(carry.trait || "none") === "leprechaun" ? " [Leprechaun]" : ""} block`;
     }
 
     function getClosestOwnDepositPedestal(maxDistance = 2.55) {
@@ -6342,6 +6562,7 @@
       ped.blockRankKey = null;
       ped.blockBlueMoon = false;
       ped.blockMutation = "normal";
+      ped.blockTrait = "none";
       ped.block.visible = false;
       ped.block.scale.setScalar(1);
       clearMeshLabel(ped.block);
@@ -6364,17 +6585,18 @@
           Number(carry.creature.rate || 1),
           targetPedestal,
           String(carry.creature.name || "Creature"),
-          { mutation: carry.creature.mutation || carry.mutation || "normal" }
+          { mutation: carry.creature.mutation || carry.mutation || "normal", trait: carry.creature.trait || carry.trait || "none" }
         );
         return !!spawned;
       }
       if (!targetPedestal || targetPedestal.hasBlock || targetPedestal.creatureId) {
-        addLuckyBlock(carry.blockKey || "basic", 1, carry.mutation || "normal");
+        addLuckyBlock(carry.blockKey || "basic", 1, carry.mutation || "normal", carry.trait || "none");
         return true;
       }
       targetPedestal.hasBlock = true;
       targetPedestal.blockRankKey = carry.blockKey || "basic";
       targetPedestal.blockMutation = carry.mutation || "normal";
+      targetPedestal.blockTrait = carry.trait || "none";
       targetPedestal.blockBlueMoon = normalizeMutation(carry.mutation || "normal") === "bluemoon";
       targetPedestal.block.visible = true;
       targetPedestal.openingUntil = 0;
@@ -6796,13 +7018,13 @@
       scene.add(wheelPointer);
 
       registerInteractable({
-        name: "Moon Wheel",
+        name: "Leprechaun Wheel",
         position: new THREE.Vector3(-5.8, 0, 4.2),
         radius: 2.8,
         get prompt() {
-          if (canSpinWheel()) return "[E] Open Moon Wheel (Spin Ready) - Blue Moon Active";
-          if (isBlueMoonActive()) return `[E] Open Moon Wheel (${formatDuration(wheelSecondsLeftThisEvent())} left)`;
-          return `[E] Open Moon Wheel (${formatDuration(wheelSecondsUntilSpin())})`;
+          if (canSpinWheel()) return "[E] Open Leprechaun Wheel (Spin Ready)";
+          if (isLeprechaunFrenzyActive()) return `[E] Open Leprechaun Wheel (${formatDuration(wheelSecondsLeftThisEvent())} left)`;
+          return `[E] Open Leprechaun Wheel (${formatDuration(wheelSecondsUntilSpin())})`;
         },
         interact() {
           openWheelPanel();
@@ -6824,25 +7046,26 @@
           plot.seedRank = rolledRank;
           plot.seedRollValue = seedRangeRoll;
           plot.growDuration = growDurationForRank(rolledRank.key);
-          plot.blueMoon = isBlueMoonActive() && Math.random() < 0.35;
+          plot.blueMoon = false;
+          plot.leprechaunTrait = isLeprechaunFrenzyActive() && Math.random() < 0.22;
           plot.sprout.visible = true;
           plot.fruit.visible = false;
           plot.sprout.scale.set(0.7, 0.7, 0.7);
-          plot.sprout.material.color.setHex(plot.blueMoon ? 0x5da8ff : rankHex(rolledRank.key));
-          state.info = `${rolledRank.label}${plot.blueMoon ? " Blue Moon" : ""} seed planted. Harvest to earn a ${rolledRank.label}${plot.blueMoon ? " Blue Moon" : ""} Lucky Block.`;
+          plot.sprout.material.color.setHex(plot.leprechaunTrait ? 0x41c25e : rankHex(rolledRank.key));
+          state.info = `${rolledRank.label}${plot.leprechaunTrait ? " [Leprechaun]" : ""} seed planted. Harvest to earn a ${rolledRank.label} Lucky Block${plot.leprechaunTrait ? " with Leprechaun Trait" : ""}.`;
           tutorialTrigger("plant-seed");
         }
       } else if (plot.stage === 2) {
         const rank = plot.seedRank || getRankByKey("basic");
-        const wasBlueMoon = !!plot.blueMoon;
-        const mutation = wasBlueMoon ? "bluemoon" : "normal";
+        const mutation = "normal";
+        const trait = normalizeTrait(plot.leprechaunTrait ? "leprechaun" : "none");
         const base = Math.max(rank.min, plot.seedRollValue || randomRange(rank.min, rank.max));
         const value = base * (1 + state.farmPayoutBonus + state.plotExpansionTier * 0.06);
         const droppedValentine = shouldDropValentinesBlock();
-        const rewardBlockKey = droppedValentine ? "valentinesblock" : rank.key;
+        const rewardBlockKey = droppedValentine ? "valentinesblock" : (trait === "leprechaun" ? "leprechaunblock" : rank.key);
         const rewardBlockMeta = blockMetaByKey(rewardBlockKey);
         state.money += value;
-        addLuckyBlock(rewardBlockKey, 1, mutation);
+        addLuckyBlock(rewardBlockKey, 1, mutation, trait);
         state.harvested += 1;
         if (Math.random() < 0.22 + state.seedYieldBonus * 0.01) state.seeds += 1;
         playHarvestSfx();
@@ -6851,9 +7074,10 @@
         plot.seedRank = null;
         plot.seedRollValue = 0;
         plot.blueMoon = false;
+        plot.leprechaunTrait = false;
         plot.sprout.visible = false;
         plot.fruit.visible = false;
-        state.info = `Harvested crop for ${formatMoney(value)} and got +1 ${rewardBlockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`} Lucky Block.`;
+        state.info = `Harvested crop for ${formatMoney(value)} and got +1 ${rewardBlockMeta.label}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block.`;
         tutorialTrigger("harvest");
       } else {
         return false;
@@ -6920,6 +7144,7 @@
         seedRank: null,
         seedRollValue: 0,
         blueMoon: false,
+        leprechaunTrait: false,
         stage: 0,
         position: new THREE.Vector3(x, 0, z)
       };
@@ -6934,10 +7159,10 @@
             const elapsed = (performance.now() / 1000 - plot.plantedAt) * (1 + state.fertilizerTier * 0.04) * rebirthGrowthMult();
             const remain = Math.max(0, Math.ceil(plot.growDuration - elapsed));
             const label = plot.seedRank ? plot.seedRank.label : "Seed";
-            return `${label}${plot.blueMoon ? " [Blue Moon]" : ""} growing... ${formatNumber(remain)}s`;
+            return `${label}${plot.leprechaunTrait ? " [Leprechaun]" : ""} growing... ${formatNumber(remain)}s`;
           }
           const label = plot.seedRank ? plot.seedRank.label : "Crop";
-          return `[E] Harvest ${label}${plot.blueMoon ? " [Blue Moon]" : ""}`;
+          return `[E] Harvest ${label}${plot.leprechaunTrait ? " [Leprechaun]" : ""}`;
         },
         interact() {
           interactWithPlot(plot);
@@ -6988,7 +7213,7 @@
           const label = p.seedRank ? p.seedRank.label : "Seed";
           const elapsed = (performance.now() / 1000 - p.plantedAt) * (1 + state.fertilizerTier * 0.04) * rebirthGrowthMult();
           const remain = Math.max(0, Math.ceil(p.growDuration - elapsed));
-          return `${label}${p.blueMoon ? " [Blue Moon]" : ""} growing... ${formatNumber(remain)}s`;
+          return `${label}${p.leprechaunTrait ? " [Leprechaun]" : ""} growing... ${formatNumber(remain)}s`;
         },
         interact() {
           const p = pickClosestPlotForAnywhere();
@@ -7059,12 +7284,14 @@
           if (pedestal.hasBlock) {
             const blockMeta = blockMetaByKey(pedestal.blockRankKey || "basic");
             const mutation = normalizeMutation(pedestal.blockMutation || (pedestal.blockBlueMoon ? "bluemoon" : "normal"));
-            return `[F] Open ${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`} Lucky Block | [E] Store block`;
+            const trait = normalizeTrait(pedestal.blockTrait || "none");
+            return `[F] Open ${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block | [E] Store block`;
           }
           if (totalLuckyBlocks() > 0) {
             const selected = blockMetaByKey(state.selectedBlockKey);
             const selectedMutation = normalizeMutation(state.selectedBlockMutation || "normal");
-            return `[E] Place ${selected.label}${selectedMutation === "normal" ? "" : ` ${mutationBadge(selectedMutation)}`} block (${formatNumber(totalLuckyBlocks())} total)`;
+            const selectedTrait = normalizeTrait(state.selectedBlockTrait || "none");
+            return `[E] Place ${selected.label}${selectedMutation === "normal" ? "" : ` ${mutationBadge(selectedMutation)}`}${selectedTrait === "leprechaun" ? " [Leprechaun]" : ""} block (${formatNumber(totalLuckyBlocks())} total)`;
           }
           return "No lucky blocks in inventory";
         },
@@ -7081,21 +7308,24 @@
               pedestal.hasBlock = false;
               const restoredKey = normalizeBlockKey(pedestal.blockRankKey || "basic");
               const restoredMutation = normalizeMutation(pedestal.blockMutation || (pedestal.blockBlueMoon ? "bluemoon" : "normal"));
+              const restoredTrait = normalizeTrait(pedestal.blockTrait || "none");
               pedestal.blockRankKey = null;
               pedestal.blockBlueMoon = false;
               pedestal.blockMutation = "normal";
+              pedestal.blockTrait = "none";
               pedestal.block.visible = false;
               pedestal.block.scale.setScalar(1);
               clearMeshLabel(pedestal.block);
-              addLuckyBlock(restoredKey, 1, restoredMutation);
+              addLuckyBlock(restoredKey, 1, restoredMutation, restoredTrait);
               const restoredMeta = blockMetaByKey(restoredKey);
-              state.info = `${restoredMeta.label}${restoredMutation === "normal" ? "" : ` ${mutationBadge(restoredMutation)}`} block moved to inventory.`;
+              state.info = `${restoredMeta.label}${restoredMutation === "normal" ? "" : ` ${mutationBadge(restoredMutation)}`}${restoredTrait === "leprechaun" ? " [Leprechaun]" : ""} block moved to inventory.`;
             } else if (totalLuckyBlocks() > 0) {
               const selectedKey = normalizeBlockKey(state.selectedBlockKey);
               const selectedMutation = normalizeMutation(state.selectedBlockMutation || "normal");
-              const hasSelected = luckyCountByMutation(selectedKey, selectedMutation) > 0;
-              const pick = hasSelected ? { key: selectedKey, mutation: selectedMutation } : bestAvailableLuckySelection();
-              const removal = removeLuckyBlock(pick.key, 1, pick.mutation);
+              const selectedTrait = normalizeTrait(state.selectedBlockTrait || "none");
+              const hasSelected = luckyCountByMutation(selectedKey, selectedMutation, selectedTrait) > 0;
+              const pick = hasSelected ? { key: selectedKey, mutation: selectedMutation, trait: selectedTrait } : bestAvailableLuckySelection();
+              const removal = removeLuckyBlock(pick.key, 1, pick.mutation, pick.trait);
               if (!removal.ok) {
                 state.info = "No lucky blocks to place.";
                 updateUI();
@@ -7104,11 +7334,12 @@
               pedestal.hasBlock = true;
               pedestal.blockRankKey = pick.key;
               pedestal.blockMutation = normalizeMutation(removal.mutation || pick.mutation);
+              pedestal.blockTrait = normalizeTrait(removal.trait || pick.trait || "none");
               pedestal.blockBlueMoon = pedestal.blockMutation === "bluemoon";
               pedestal.block.visible = true;
               updatePedestalBlockVisual(pedestal);
               const placedMeta = blockMetaByKey(pick.key);
-              state.info = `${placedMeta.label}${pedestal.blockMutation === "normal" ? "" : ` ${mutationBadge(pedestal.blockMutation)}`} lucky block placed on pedestal.`;
+              state.info = `${placedMeta.label}${pedestal.blockMutation === "normal" ? "" : ` ${mutationBadge(pedestal.blockMutation)}`}${pedestal.blockTrait === "leprechaun" ? " [Leprechaun]" : ""} lucky block placed on pedestal.`;
               tutorialTrigger("place-block");
             } else {
               state.info = "No lucky blocks to place.";
@@ -7177,6 +7408,7 @@
             blockRankKey: null,
             blockBlueMoon: false,
             blockMutation: "normal",
+            blockTrait: "none",
             creatureId: "",
             openingUntil: 0,
             phase: Math.random() * Math.PI * 2,
@@ -7688,6 +7920,7 @@
       const x = pedestal.position.x;
       const z = pedestal.position.z;
       const mutation = normalizeMutation(opts.mutation ?? (opts.blueMoon ? "bluemoon" : "normal"));
+      const trait = normalizeTrait(opts.trait || "none");
       const blueMoon = mutation === "bluemoon";
       const soulbound = mutation === "soulbound";
       const fromRankPool = CREATURE_NAMES_BY_RANK[rank.key] || [];
@@ -7713,8 +7946,8 @@
       const rateNum = Number(rate);
       const finalRate = (Number.isFinite(rateNum) && rateNum > 0)
         ? rateNum
-        : fixedCreatureRateForCreature(rank.key, name, mutation);
-      const safeRate = Math.max(1, Math.floor(Number.isFinite(finalRate) ? finalRate : fixedCreatureRateForCreature(rank.key, name, mutation)));
+        : fixedCreatureRateForCreature(rank.key, name, mutation, trait);
+      const safeRate = Math.max(1, Math.floor(Number.isFinite(finalRate) ? finalRate : fixedCreatureRateForCreature(rank.key, name, mutation, trait)));
       let creatureId = String(opts.id || "").trim();
       if (!creatureId || creatures.some((it) => String(it?.id || "") === creatureId)) {
         creatureId = `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -7727,13 +7960,15 @@
         mesh,
         phase: Math.random() * Math.PI * 2,
         mutation,
+        trait,
         blueMoon,
         pedestalId: pedestal.id
       };
-      markCreatureDiscovered(c.name, mutation);
+      markCreatureDiscovered(c.name, mutation, trait);
       pedestal.creatureId = c.id;
       const mutSuffix = mutation === "normal" ? "" : ` [${mutationBadge(mutation)}]`;
-      setMeshLabel(mesh, rank.label, c.name, `${formatMoney(safeRate)}/s${mutSuffix}`, mutationTint(mutation));
+      const traitPrefix = trait === "leprechaun" ? `[${traitBadge(trait)}] ` : "";
+      setMeshLabel(mesh, `${traitPrefix}${rank.label}`, c.name, `${formatMoney(safeRate)}/s${mutSuffix}`, mutationTint(mutation));
       const creatureIt = {
         name: `Creature ${c.id}`,
         position: pedestal.position,
@@ -7809,6 +8044,9 @@
 
       const sourceRankKey = pedestal.blockRankKey || "basic";
       const sourceMutation = normalizeMutation(pedestal.blockMutation || (pedestal.blockBlueMoon ? "bluemoon" : "normal"));
+      const sourceTrait = normalizeBlockKey(sourceRankKey) === "leprechaunblock"
+        ? "leprechaun"
+        : normalizeTrait(pedestal.blockTrait || "none");
       pedestal.hasBlock = false;
       pedestal.openingUntil = performance.now() / 1000 + 0.9;
       pedestal.block.visible = true;
@@ -7819,17 +8057,18 @@
 
       playLuckyOpenSfx();
       const sourceMeta = blockMetaByKey(sourceRankKey);
-      state.info = `Opening ${sourceMeta.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} lucky block...`;
+      state.info = `Opening ${sourceMeta.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`}${sourceTrait === "leprechaun" ? " [Leprechaun]" : ""} lucky block...`;
       updateUI();
 
       setTimeout(() => {
         if (!pedestal || pedestal.creatureId) return;
-        const creature = spawnCreatureOnPedestal(rank, null, pedestal, "", { mutation: sourceMutation });
+        const creature = spawnCreatureOnPedestal(rank, null, pedestal, "", { mutation: sourceMutation, trait: sourceTrait });
         pedestal.block.visible = false;
         pedestal.block.scale.setScalar(1);
         pedestal.blockRankKey = null;
         pedestal.blockBlueMoon = false;
         pedestal.blockMutation = "normal";
+        pedestal.blockTrait = "none";
         clearMeshLabel(pedestal.block);
         pedestal.openingUntil = 0;
         if (!creature) {
@@ -7837,7 +8076,7 @@
           updateUI();
           return;
         }
-        state.info = `${rank.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} creature hatched from ${sourceMeta.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} block: ${creature.name} (+${formatMoney(creature.rate)}/s)`;
+        state.info = `${sourceTrait === "leprechaun" ? "[Leprechaun] " : ""}${rank.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`} creature hatched from ${sourceMeta.label}${sourceMutation === "normal" ? "" : ` ${mutationBadge(sourceMutation)}`}${sourceTrait === "leprechaun" ? " [Leprechaun]" : ""} block: ${creature.name} (+${formatMoney(creature.rate)}/s)`;
         tutorialTrigger("open-block");
         checkQuests();
         updateUI();
@@ -8268,6 +8507,7 @@
         indexPanelEl.classList.remove("open");
         inventoryEl.classList.remove("open");
         cosmeticsPanelEl.classList.remove("open");
+        toggleFusePanel(false);
         closeWheelPanel();
         closeRebirthPanel();
         closeDailyPanel();
@@ -8405,6 +8645,7 @@
         toggleGuide(false);
         toggleShop(false);
         toggleInventory(false);
+        toggleFusePanel(false);
         indexPanelEl.classList.remove("open");
         chatPanelEl.classList.remove("open");
         toggleAdminPanel(false);
@@ -8423,6 +8664,7 @@
       if (next) {
         indexPanelEl.classList.remove("open");
         cosmeticsPanelEl.classList.remove("open");
+        toggleFusePanel(false);
         state.shopOpen = false;
         shopEl.classList.remove("open");
         shopEl.setAttribute("aria-hidden", "true");
@@ -8463,19 +8705,19 @@
     }
 
     function renderWheelPanel() {
-      const active = isBlueMoonActive();
+      const active = isLeprechaunFrenzyActive();
       const canSpin = canSpinWheel();
       if (active) {
         wheelInfoEl.innerHTML = `
-          <div style="color:#9cd8ff">Blue Moon is active now.</div>
+          <div style="color:#9cd8ff">Leprechaun Frenzy is active now.</div>
           <div style="margin-top:4px">Time left this event: <b>${formatDuration(wheelSecondsLeftThisEvent())}</b></div>
-          <div style="margin-top:4px">During Blue Moon, newly planted seeds can mutate.</div>
+          <div style="margin-top:4px">During Frenzy, newly planted seeds can gain the Leprechaun trait.</div>
           <div style="margin-top:4px;color:#9dffc7">${canSpin ? "Spin is available once this event." : "You already spun this event."}</div>
         `;
       } else {
         wheelInfoEl.innerHTML = `
-          <div>Next Blue Moon in <b>${formatDuration(wheelSecondsUntilSpin())}</b>.</div>
-          <div style="margin-top:4px;color:#9cd8ff">Blue Moon runs for 10 minutes every hour.</div>
+          <div>Next Leprechaun Frenzy in <b>${formatDuration(wheelSecondsUntilSpin())}</b>.</div>
+          <div style="margin-top:4px;color:#9cd8ff">Frenzy runs for 10 minutes every hour.</div>
         `;
       }
       wheelSpinEl.disabled = !canSpin || wheelSpinBusy;
@@ -8539,7 +8781,7 @@
     }
 
     async function spinMoonWheel() {
-      const info = blueMoonWindowInfo();
+      const info = leprechaunFrenzyInfo();
       if (wheelSpinBusy || !info.active || !canSpinWheel()) {
         renderWheelPanel();
         return;
@@ -8561,13 +8803,16 @@
         const cash = 2500 + Math.floor(Math.random() * 4000);
         state.money += cash;
         resultText = `+${formatMoney(cash)}`;
-      } else {
+      } else if (roll < 0.95) {
         const rank = RANKS[Math.max(0, Math.min(RANKS.length - 1, 2 + Math.floor(Math.random() * 6)))];
         addLuckyBlock(rank.key, 1);
         resultText = `+1 ${rank.label} Lucky Block`;
+      } else {
+        addLuckyBlock("leprechaunblock", 1, "normal", "leprechaun");
+        resultText = `+1 Leprechaun Lucky Block`;
       }
       state.lastSpinWindow = info.windowId;
-      state.info = `Moon Wheel reward: ${resultText}.`;
+      state.info = `Leprechaun Wheel reward: ${resultText}.`;
       wheelSpinBusy = false;
       renderWheelPanel();
       updateUI();
@@ -8734,18 +8979,21 @@
       const allBlockKeys = [...RANKS.map((r) => r.key), ...SPECIAL_BLOCKS.map((s) => s.key)];
       for (const key of allBlockKeys) {
         const meta = blockMetaByKey(key);
-        for (const mutation of MUTATION_KEYS) {
-          const qty = luckyCountByMutation(key, mutation);
-          if (qty < 1) continue;
-          luckySlots.push({
-            kind: "lucky",
-            key: `${meta.key}|${mutation}`,
-            rank: { key: meta.key, label: meta.label, color: meta.color },
-            mutation,
-            count: qty,
-            title: mutation === "normal" ? meta.label : `${meta.label} ${mutationBadge(mutation)}`,
-            meta: "Lucky Block"
-          });
+        for (const trait of TRAIT_KEYS) {
+          for (const mutation of MUTATION_KEYS) {
+            const qty = luckyCountByMutation(key, mutation, trait);
+            if (qty < 1) continue;
+            luckySlots.push({
+              kind: "lucky",
+              key: `${meta.key}|${mutation}|${trait}`,
+              rank: { key: meta.key, label: meta.label, color: meta.color },
+              mutation,
+              trait,
+              count: qty,
+              title: `${trait === "leprechaun" ? "[Leprechaun] " : ""}${mutation === "normal" ? meta.label : `${meta.label} ${mutationBadge(mutation)}`}`,
+              meta: "Lucky Block"
+            });
+          }
         }
       }
       const creatureSlots = creatures
@@ -8762,7 +9010,8 @@
             : `${mutationBadge(c.mutation || (c.blueMoon ? "bluemoon" : "normal"))} Creature`,
           rate: c.rate,
           blueMoon: !!c.blueMoon,
-          mutation: normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal"))
+          mutation: normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal")),
+          trait: normalizeTrait(c.trait || "none")
         }));
       const inCreatureTab = state.inventoryTab === "creatures";
       const baseSlots = inCreatureTab ? creatureSlots : luckySlots;
@@ -8771,7 +9020,7 @@
         if (inCreatureTab) {
           return s.title.toLowerCase().includes(q) || String(s.rank?.label || "").toLowerCase().includes(q) || s.meta.toLowerCase().includes(q);
         }
-        return s.title.toLowerCase().includes(q) || s.rank.key.includes(q) || s.mutation.includes(q);
+        return s.title.toLowerCase().includes(q) || s.rank.key.includes(q) || s.mutation.includes(q) || String(s.trait || "none").includes(q);
       });
       if (!state.inventoryFocus || !baseSlots.some((s) => s.key === state.inventoryFocus)) {
         state.inventoryFocus = baseSlots[0] ? baseSlots[0].key : "";
@@ -8782,11 +9031,11 @@
         if (inCreatureTab) {
           return `<button class="invSlot${active}" data-kind="creature" data-id="${s.id}">
             <div class="invSlotTitle ${s.rank.color}">${s.title}</div>
-            <div class="invSlotMeta">${s.rank.label}${s.mutation !== "normal" ? ` • ${mutationBadge(s.mutation)}` : ""}</div>
+            <div class="invSlotMeta">${s.rank.label}${s.mutation !== "normal" ? ` • ${mutationBadge(s.mutation)}` : ""}${s.trait === "leprechaun" ? " • Leprechaun" : ""}</div>
             <div class="invSlotQty">${formatMoney(s.rate)}/s</div>
           </button>`;
         }
-        return `<button class="invSlot${active}" data-kind="lucky" data-rank="${s.rank.key}" data-mutation="${s.mutation}">
+        return `<button class="invSlot${active}" data-kind="lucky" data-rank="${s.rank.key}" data-mutation="${s.mutation}" data-trait="${s.trait || "none"}">
           <div class="invSlotTitle ${s.rank.color}">${s.title}</div>
           <div class="invSlotMeta">${s.meta}</div>
           <div class="invSlotQty">x${formatNumber(s.count)}</div>
@@ -8794,11 +9043,13 @@
       }).join("");
       const totalMoon = allBlockKeys.reduce((sum, k) => sum + luckyMoonCount(k), 0);
       const totalSoulbound = allBlockKeys.reduce((sum, k) => sum + luckySoulboundCount(k), 0);
+      const totalLeprechaun = allBlockKeys.reduce((sum, k) =>
+        sum + luckyCountByMutation(k, "normal", "leprechaun") + luckyCountByMutation(k, "bluemoon", "leprechaun") + luckyCountByMutation(k, "soulbound", "leprechaun"), 0);
       const inspectText = focus
         ? (
           inCreatureTab
-            ? `${focus.title} (${focus.rank.label}) | Income: ${formatMoney(focus.rate)}/s | ${focus.mutation === "normal" ? "Normal creature." : `${mutationBadge(focus.mutation)} creature.`}`
-            : `${focus.title} (${focus.meta}) | Quantity: ${formatNumber(focus.count)} | ${mutationBadge(focus.mutation)} mutation variant.`
+            ? `${focus.title} (${focus.rank.label}) | Income: ${formatMoney(focus.rate)}/s | ${focus.trait === "leprechaun" ? "Leprechaun trait. " : ""}${focus.mutation === "normal" ? "Normal creature." : `${mutationBadge(focus.mutation)} creature.`}`
+            : `${focus.title} (${focus.meta}) | Quantity: ${formatNumber(focus.count)} | ${mutationBadge(focus.mutation)} mutation variant${focus.trait === "leprechaun" ? " + Leprechaun trait" : ""}.`
         )
         : "Select an item slot to inspect it.";
       inventorySummaryEl.innerHTML = `
@@ -8810,7 +9061,7 @@
           <div class="invCount">${inCreatureTab ? `${formatNumber(creatures.length)}/${formatNumber(state.maxCreatures)}` : `${formatNumber(totalLuckyBlocks())}/${formatNumber(RANKS.length * 2 * 999)}`}</div>
           <input class="invSearch" id="invSearch" placeholder="Search inventory..." value="${String(state.inventoryQuery || "").replace(/"/g, "&quot;")}" />
         </div>
-        <div style="margin-bottom:6px;color:#cce7ff">${inCreatureTab ? `Creatures in barn: <b>${formatNumber(creatures.length)}</b> | Floors: <b>${formatNumber(safeBarnFloorCount())}</b>` : `Blue Moon: <b>${formatNumber(totalMoon)}</b> | Soulbound: <b>${formatNumber(totalSoulbound)}</b> | On pedestals: <b>${placedCount}/${formatNumber(pedestals.length)}</b>`}</div>
+        <div style="margin-bottom:6px;color:#cce7ff">${inCreatureTab ? `Creatures in barn: <b>${formatNumber(creatures.length)}</b> | Floors: <b>${formatNumber(safeBarnFloorCount())}</b>` : `Blue Moon: <b>${formatNumber(totalMoon)}</b> | Soulbound: <b>${formatNumber(totalSoulbound)}</b> | Leprechaun: <b>${formatNumber(totalLeprechaun)}</b> | On pedestals: <b>${placedCount}/${formatNumber(pedestals.length)}</b>`}</div>
         <div class="invSlots">${slotRows || `<div style="padding:8px;color:#b7cce0">${baseSlots.length ? "No items match search." : (inCreatureTab ? "You do not own any creatures yet." : "You do not own any lucky blocks yet.")}</div>`}</div>
         <div class="invInspect">${inspectText}</div>
         <div style="margin-top:6px;color:#d5f4ff">${inCreatureTab ? "Walk up to a creature and press E to sell." : "Use <b>E</b> near a pedestal to place/store blocks."}</div>
@@ -8819,12 +9070,12 @@
     }
 
     function inventoryRenderSignature() {
-      const invRanks = RANKS.map((r) => `${luckyNormalCount(r.key)}|${luckyMoonCount(r.key)}|${luckySoulboundCount(r.key)}`).join(",");
-      const invSpecial = SPECIAL_BLOCKS.map((s) => `${luckyNormalCount(s.key)}|${luckyMoonCount(s.key)}|${luckySoulboundCount(s.key)}`).join(",");
+      const invRanks = RANKS.map((r) => `${luckyNormalCount(r.key)}|${luckyMoonCount(r.key)}|${luckySoulboundCount(r.key)}|${luckyCountByMutation(r.key, "normal", "leprechaun")}|${luckyCountByMutation(r.key, "bluemoon", "leprechaun")}|${luckyCountByMutation(r.key, "soulbound", "leprechaun")}`).join(",");
+      const invSpecial = SPECIAL_BLOCKS.map((s) => `${luckyNormalCount(s.key)}|${luckyMoonCount(s.key)}|${luckySoulboundCount(s.key)}|${luckyCountByMutation(s.key, "normal", "leprechaun")}|${luckyCountByMutation(s.key, "bluemoon", "leprechaun")}|${luckyCountByMutation(s.key, "soulbound", "leprechaun")}`).join(",");
       const inv = `${invRanks}::${invSpecial}`;
-      const creatureSig = creatures.map((c) => `${c.id}|${c.name}|${c.rate}|${c.rank.key}|${normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal"))}`).join(",");
+      const creatureSig = creatures.map((c) => `${c.id}|${c.name}|${c.rate}|${c.rank.key}|${normalizeMutation(c.mutation || (c.blueMoon ? "bluemoon" : "normal"))}|${normalizeTrait(c.trait || "none")}`).join(",");
       const placed = pedestals.reduce((sum, p) => sum + (p.hasBlock ? 1 : 0), 0);
-      return `${inv}::${creatureSig}::${placed}::${state.selectedBlockKey}::${state.selectedBlockMutation}::${state.inventoryTab}::${state.inventoryQuery}::${state.inventoryFocus}::${state.inventoryOpen ? 1 : 0}`;
+      return `${inv}::${creatureSig}::${placed}::${state.selectedBlockKey}::${state.selectedBlockMutation}::${state.selectedBlockTrait}::${state.inventoryTab}::${state.inventoryQuery}::${state.inventoryFocus}::${state.inventoryOpen ? 1 : 0}`;
     }
 
     function renderIndexPanel() {
@@ -8836,7 +9087,7 @@
       const found = INDEX_ENTRIES.reduce((sum, entry) => sum + (seenMap[entry.name] ? 1 : 0), 0);
       const total = INDEX_ENTRIES.length;
       const pct = total > 0 ? Math.floor((found / total) * 100) : 0;
-      // If not the Blue Moon tab and the index is completed, reward the master base skin.
+      // If not the Leprechaun tab and the index is completed, reward the master base skin.
       if (!moonTab && found === total && !state.masterBaseOwned) {
         state.masterBaseOwned = true;
         state.selectedBaseSkin = "master";
@@ -8857,8 +9108,8 @@
       }
 
       indexSummaryEl.innerHTML = `
-        <div><b>${moonTab ? "Blue Moon Index" : "Creature Index"}</b>: ${found}/${total} (${pct}%)</div>
-        <div style="margin-top:4px;color:#b9d8ef">${moonTab ? "(blue moon base coming soon)" : "Completion rewards are available."}</div>
+        <div><b>${moonTab ? "Leprechaun Trait Index" : "Creature Index"}</b>: ${found}/${total} (${pct}%)</div>
+        <div style="margin-top:4px;color:#b9d8ef">${moonTab ? "(tracks creatures discovered with Leprechaun trait)" : "Completion rewards are available."}</div>
       `;
       indexListEl.innerHTML = INDEX_ENTRIES.map((entry) => {
         const seen = !!seenMap[entry.name];
@@ -8872,6 +9123,7 @@
       if (open) {
         state.inventoryOpen = false;
         inventoryEl.classList.remove("open");
+        toggleFusePanel(false);
         chatPanelEl.classList.remove("open");
         toggleAdminPanel(false);
         settingsPanelEl.classList.remove("open");
@@ -8881,6 +9133,125 @@
         document.exitPointerLock();
         renderIndexPanel();
       }
+    }
+
+    function fuseCandidates() {
+      return creatures
+        .filter((c) => !!getPedestalById(c.pedestalId))
+        .sort((a, b) => Number(b.rate || 0) - Number(a.rate || 0));
+    }
+
+    function computeFuseStrength(list) {
+      if (!Array.isArray(list) || list.length < 1) return 0;
+      let total = 0;
+      for (const c of list) {
+        const rankIdx = Math.max(0, RANKS.findIndex((r) => r.key === normalizeBlockKey(c?.rank?.key || c?.rankKey || "basic")));
+        const mutationBoost = normalizeMutation(c?.mutation || "normal") === "normal" ? 0 : 0.55;
+        const traitBoost = normalizeTrait(c?.trait || "none") === "leprechaun" ? 1.15 : 0;
+        total += rankIdx + mutationBoost + traitBoost;
+      }
+      return total / Math.max(1, list.length);
+    }
+
+    function rollLeprechaunFuseOutcome(selectedCreatures) {
+      const strength = computeFuseStrength(selectedCreatures);
+      const maxRank = Math.max(0, ...selectedCreatures.map((c) => Math.max(0, RANKS.findIndex((r) => r.key === normalizeBlockKey(c?.rank?.key || c?.rankKey || "basic")))));
+      const targetIdx = Math.max(0, Math.min(LEPRECHAUN_FUSE_OUTCOMES.length - 1, Math.floor((strength / Math.max(1, RANKS.length - 1)) * (LEPRECHAUN_FUSE_OUTCOMES.length - 1))));
+      const weights = LEPRECHAUN_FUSE_OUTCOMES.map((_, i) => 1 / (1 + Math.pow(i - targetIdx, 2)));
+      const topBase = maxRank >= 7 ? 0.05 : (maxRank >= 5 ? 0.02 : 0.005);
+      weights[weights.length - 1] *= topBase * (1 + Math.max(0, strength - 4) * 0.18);
+      let total = 0;
+      for (const w of weights) total += Math.max(0.000001, w);
+      let roll = Math.random() * total;
+      for (let i = 0; i < weights.length; i += 1) {
+        roll -= Math.max(0.000001, weights[i]);
+        if (roll <= 0) return LEPRECHAUN_FUSE_OUTCOMES[i];
+      }
+      return LEPRECHAUN_FUSE_OUTCOMES[0];
+    }
+
+    function renderFusePanel() {
+      if (!fusePanelEl || fusePanelEl.style.display === "none") return;
+      const list = fuseCandidates();
+      const selects = [fusePick1El, fusePick2El, fusePick3El, fusePick4El];
+      const current = selects.map((s) => String(s?.value || ""));
+      const options = [`<option value="">Select creature...</option>`]
+        .concat(list.map((c) => `<option value="${c.id}">${c.name} (${c.rank.label}) ${formatMoney(c.rate)}/s${normalizeTrait(c.trait || "none") === "leprechaun" ? " [Leprechaun]" : ""}</option>`))
+        .join("");
+      for (const [i, sel] of selects.entries()) {
+        if (!sel) continue;
+        sel.innerHTML = options;
+        const fallback = list[i] ? String(list[i].id || "") : "";
+        sel.value = list.some((c) => String(c.id) === current[i]) ? current[i] : fallback;
+      }
+      const picked = selects.map((s) => String(s?.value || "")).filter(Boolean);
+      const unique = [...new Set(picked)];
+      const selectedCreatures = unique.map((id) => creatures.find((c) => String(c.id) === id)).filter(Boolean);
+      const strength = selectedCreatures.length >= 1 ? computeFuseStrength(selectedCreatures) : 0;
+      fuseInfoEl.textContent = list.length < 4
+        ? "You need at least 4 creatures on pedestals."
+        : "Select 4 creatures to fuse. Better creatures improve your odds.";
+      const topChance = Math.max(0.2, Math.min(22, (Math.max(0, strength - 4) * 2.1) + (selectedCreatures.some((c) => normalizeTrait(c.trait || "none") === "leprechaun") ? 3 : 0)));
+      fuseOddsEl.innerHTML = `Possible outcomes: 10 fixed creatures. <b>Leprechaun</b> result chance scales with quality (est. ${formatNumber(topChance)}%).`;
+      fuseDoEl.disabled = list.length < 4;
+    }
+
+    function toggleFusePanel(force = null) {
+      if (!fusePanelEl) return;
+      const open = force === null ? fusePanelEl.style.display === "none" : !!force;
+      fusePanelEl.style.display = open ? "block" : "none";
+      if (open) {
+        toggleShop(false);
+        toggleInventory(false);
+        toggleIndexPanel(false);
+        toggleCosmeticsPanel(false);
+        toggleSettingsPanel(false);
+        closeRebirthPanel();
+        closeWheelPanel();
+        closeDailyPanel();
+        document.exitPointerLock();
+        renderFusePanel();
+      }
+    }
+
+    function runLeprechaunFuse() {
+      const selects = [fusePick1El, fusePick2El, fusePick3El, fusePick4El];
+      const pickedIds = selects.map((s) => String(s?.value || "").trim()).filter(Boolean);
+      const uniqueIds = [...new Set(pickedIds)];
+      if (uniqueIds.length !== 4) {
+        state.info = "Select 4 different creatures.";
+        updateUI();
+        return;
+      }
+      const selected = uniqueIds.map((id) => creatures.find((c) => String(c.id) === id)).filter(Boolean);
+      if (selected.length !== 4) {
+        state.info = "One of the selected creatures is no longer available.";
+        renderFusePanel();
+        updateUI();
+        return;
+      }
+      const freePedestal = findFreeCreaturePedestal();
+      if (!freePedestal) {
+        state.info = "Need an empty pedestal before fusing.";
+        updateUI();
+        return;
+      }
+      for (const c of selected) removeCreatureLocal(c.id);
+      const outcome = rollLeprechaunFuseOutcome(selected);
+      const rank = getRankByKey(outcome.rankKey || "basic");
+      const inheritedMutation = normalizeMutation(selected.sort((a, b) => mutationMultiplier(b.mutation || "normal") - mutationMultiplier(a.mutation || "normal"))[0]?.mutation || "normal");
+      const finalTrait = normalizeTrait(outcome.trait || "none");
+      const created = spawnCreatureOnPedestal(rank, null, freePedestal, outcome.name, {
+        mutation: inheritedMutation,
+        trait: finalTrait
+      });
+      if (created) {
+        state.info = `Fuse success: ${finalTrait === "leprechaun" ? "[Leprechaun] " : ""}${created.name} (${rank.label}) created.`;
+      } else {
+        state.info = "Fuse failed. Try again.";
+      }
+      renderFusePanel();
+      updateUI();
     }
 
     async function buyPersonalLuckInShop(_targetLuck) {
@@ -8940,7 +9311,7 @@
     function renderHudOnly() {
       const name = multiplayer.profile.username || playerTag(multiplayer.playerId || "local");
       const badge = name;
-      const blueMoon = isBlueMoonActive();
+      const frenzy = isLeprechaunFrenzyActive();
       ensureBatState();
       const abilityLabel = currentCombatLabel();
       const now = realNowSec();
@@ -8958,7 +9329,7 @@
         <div class="row"><span class="label">PvP Tool</span><span class="stat">${abilityLabel}${batCd > 0.01 ? ` (CD ${formatNumber(batCd)}s)` : ""}</span></div>
         <div class="row"><span class="label">PvP</span><span class="stat">${stunLeft > 0.01 ? `Stunned ${formatNumber(stunLeft)}s` : (stealLeft > 0.01 ? (stealPaused ? "Steal paused" : `Stealing ${formatNumber(stealLeft)}s`) : (state.carriedSteal ? `Carrying ${carriedDisplayName(state.carriedSteal)}` : "Ready"))}</span></div>
         <div class="row"><span class="label">Base Lock</span><span class="stat">${ownLockLeft > 0 ? `${formatNumber(ownLockLeft)}s left` : "Ready"}</span></div>
-        <div class="row"><span class="label">Blue Moon</span><span class="stat">${blueMoon ? `ACTIVE (${formatDuration(wheelSecondsLeftThisEvent())} left)` : `in ${formatDuration(wheelSecondsUntilSpin())}`}</span></div>
+        <div class="row"><span class="label">Frenzy</span><span class="stat">${frenzy ? `ACTIVE (${formatDuration(wheelSecondsLeftThisEvent())} left)` : `in ${formatDuration(wheelSecondsUntilSpin())}`}</span></div>
         <div class="row"><span class="label">Friend Boost</span><span class="stat">+${Math.min(30, multiplayer.occupiedSlots.length * 2)}%</span></div>
         <div class="moneyMain" style="font-size:40px;line-height:1;color:#ffe7a0;text-shadow:0 2px 0 rgba(0,0,0,0.35)">${formatMoney(state.money)}</div>
         <div class="stardustMain">💫 ${formatNumber(state.stardust)} Stardust</div>
@@ -8983,6 +9354,7 @@
       dockShopBtn.classList.toggle("active", !!state.shopOpen);
       dockRebirthBtn.classList.toggle("active", rebirthPanelEl.style.display !== "none");
       dockIndexBtn.classList.toggle("active", indexPanelEl?.classList.contains("open"));
+      dockFuseBtn.classList.toggle("active", fusePanelEl.style.display !== "none");
       dockCosmeticsBtn.classList.toggle("active", cosmeticsPanelEl?.classList.contains("open"));
       dockSettingsBtn.classList.toggle("active", settingsPanelEl?.classList.contains("open"));
       dockGuideBtn.classList.toggle("active", helpEl.classList.contains("open"));
@@ -8998,6 +9370,7 @@
       if (state.shopOpen) {
         shopFundsEl.textContent = `Funds: ${formatMoney(state.money)} | 💫 ${formatNumber(state.stardust)} | Seeds: ${formatNumber(state.seeds)} | Rebirths: ${formatNumber(state.rebirths)} | Server Luck: x${formatNumber(multiplayer.serverLuck || 1)}`;
       }
+      if (fusePanelEl.style.display !== "none") renderFusePanel();
     }
 
     function installEvents() {
@@ -9032,6 +9405,10 @@
         }
         if (e.code === "Escape" && rebirthPanelEl.style.display !== "none") {
           closeRebirthPanel();
+          return;
+        }
+        if (e.code === "Escape" && fusePanelEl.style.display !== "none") {
+          toggleFusePanel(false);
           return;
         }
         if (e.code === "Escape" && settingsPanelEl?.classList.contains("open")) {
@@ -9099,6 +9476,10 @@
         toggleGuide(false);
         toggleIndexPanel();
       });
+      dockFuseBtn.addEventListener("click", () => {
+        toggleGuide(false);
+        toggleFusePanel();
+      });
       dockCosmeticsBtn.addEventListener("click", () => {
         toggleGuide(false);
         toggleCosmeticsPanel();
@@ -9161,7 +9542,7 @@
       adminEventRunEl?.addEventListener("click", () => {
         const seconds = Math.max(10, Math.floor(Number(adminEventSecondsEl?.value || 600)));
         const scope = String(adminEventScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
-        void runAdminCommand(`event bluemoon ${scope} ${seconds}`);
+        void runAdminCommand(`event leprechaunfrenzy ${scope} ${seconds}`);
       });
       adminGiveRunEl?.addEventListener("click", () => {
         const username = String(adminGiveUserEl?.value || "").trim();
@@ -9197,13 +9578,14 @@
       adminSpawnBlockRunEl?.addEventListener("click", () => {
         const blockKey = normalizeBlockKey(String(adminSpawnBlockRankEl?.value || "").trim());
         const mutation = normalizeMutation(String(adminSpawnBlockMutationEl?.value || "normal"));
+        const trait = normalizeTrait(String(adminSpawnBlockTraitEl?.value || "none"));
         const scope = String(adminSpawnBlockScopeEl?.value || "server").toLowerCase() === "global" ? "global" : "server";
         const amount = Math.max(1, Math.floor(Number(adminSpawnBlockAmountEl?.value || 1)));
         if (!blockKey) {
           state.info = "Select a block rarity for Spawn Lucky Blocks.";
           return;
         }
-        void runAdminCommand(`spawnblock ${blockKey} ${scope} ${amount} ${mutation}`);
+        void runAdminCommand(`spawnblock ${blockKey} ${scope} ${amount} ${mutation} ${trait}`);
       });
       adminResetRunEl?.addEventListener("click", () => {
         const username = String(adminResetUserEl?.value || "").trim();
@@ -9229,6 +9611,11 @@
         }
         void runAdminCommand(`broadcast ${text}`);
       });
+      fuseCloseEl?.addEventListener("click", () => toggleFusePanel(false));
+      fuseDoEl?.addEventListener("click", () => runLeprechaunFuse());
+      for (const sel of [fusePick1El, fusePick2El, fusePick3El, fusePick4El]) {
+        sel?.addEventListener("change", () => renderFusePanel());
+      }
       adminConsoleRunEl?.addEventListener("click", () => {
         const text = String(adminConsoleInputEl?.value || "").trim();
         if (!text) return;
@@ -9319,17 +9706,19 @@
             const c = creatures.find((x) => x.id === id);
             if (c) {
               state.inventoryFocus = `creature:${c.id}`;
-              state.info = `${c.name} (${c.rank.label}) • ${formatMoney(c.rate)}/s${c.blueMoon ? " • Blue Moon" : ""}`;
+              state.info = `${c.name} (${c.rank.label}) • ${formatMoney(c.rate)}/s${normalizeTrait(c.trait || "none") === "leprechaun" ? " • Leprechaun" : ""}`;
             }
           } else {
             const key = String(slotBtn.dataset.rank || "basic");
             const mutation = String(slotBtn.dataset.mutation || "normal").toLowerCase();
-            const count = luckyCountByMutation(key, mutation);
+            const trait = normalizeTrait(String(slotBtn.dataset.trait || "none"));
+            const count = luckyCountByMutation(key, mutation, trait);
             const blockMeta = blockMetaByKey(key);
-            state.inventoryFocus = `${normalizeBlockKey(key)}|${normalizeMutation(mutation)}`;
+            state.inventoryFocus = `${normalizeBlockKey(key)}|${normalizeMutation(mutation)}|${trait}`;
             state.selectedBlockKey = normalizeBlockKey(key);
             state.selectedBlockMutation = normalizeMutation(mutation);
-            state.info = `${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`} Lucky Block selected. Qty: ${formatNumber(count)}.`;
+            state.selectedBlockTrait = trait;
+            state.info = `${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block selected. Qty: ${formatNumber(count)}.`;
           }
           updateUI();
           return;
@@ -9748,22 +10137,23 @@
             const ped = pedestals[idx] || null;
             if (carry?.itemType === "creature" && carry.creature && ped && !ped.hasBlock && !ped.creatureId) {
               const rankMeta = getRankByKey(carry.creature.rankKey || carry.blockKey || "basic");
-              spawnCreatureOnPedestal(
-                rankMeta,
-                Number(carry.creature.rate || 1),
-                ped,
-                String(carry.creature.name || "Creature"),
-                { mutation: carry.creature.mutation || carry.mutation || "normal" }
-              );
-            } else if (carry?.itemType !== "creature" && ped && !ped.hasBlock && !ped.creatureId) {
-              ped.hasBlock = true;
-              ped.blockRankKey = carry.blockKey || "basic";
-              ped.blockMutation = carry.mutation || "normal";
-              ped.blockBlueMoon = normalizeMutation(carry.mutation || "normal") === "bluemoon";
-              ped.block.visible = true;
-              ped.openingUntil = 0;
-              updatePedestalBlockVisual(ped);
-            }
+                spawnCreatureOnPedestal(
+                  rankMeta,
+                  Number(carry.creature.rate || 1),
+                  ped,
+                  String(carry.creature.name || "Creature"),
+                  { mutation: carry.creature.mutation || carry.mutation || "normal", trait: carry.creature.trait || carry.trait || "none" }
+                );
+              } else if (carry?.itemType !== "creature" && ped && !ped.hasBlock && !ped.creatureId) {
+                ped.hasBlock = true;
+                ped.blockRankKey = carry.blockKey || "basic";
+                ped.blockMutation = carry.mutation || "normal";
+                ped.blockTrait = carry.trait || "none";
+                ped.blockBlueMoon = normalizeMutation(carry.mutation || "normal") === "bluemoon";
+                ped.block.visible = true;
+                ped.openingUntil = 0;
+                updatePedestalBlockVisual(ped);
+              }
             state.info = `Secured ${carriedDisplayName(carry)} in your barn.`;
             updateUI();
           } else if (String(msg.ownerId || "") === multiplayer.playerId) {
@@ -9782,15 +10172,15 @@
               const rankMeta = getRankByKey(c.rankKey || "basic");
               const pedestal = findFreeCreaturePedestal();
               if (pedestal) {
-                spawnCreatureOnPedestal(rankMeta, Number(c.rate || 0), pedestal, String(c.name || "Creature"), { mutation: normalizeMutation(c.mutation || "normal") });
+                spawnCreatureOnPedestal(rankMeta, Number(c.rate || 0), pedestal, String(c.name || "Creature"), { mutation: normalizeMutation(c.mutation || "normal"), trait: normalizeTrait(c.trait || "none") });
                 state.info = `Steal complete: ${String(c.name || "Creature")} placed on your pedestal.`;
               } else {
                 state.info = `Steal complete: ${String(c.name || "Creature")} stolen, but no free pedestal.`;
               }
             } else {
               const meta = blockMetaByKey(String(msg.blockKey || "basic"));
-              addLuckyBlock(String(msg.blockKey || "basic"), 1, normalizeMutation(msg.mutation || "normal"));
-              state.info = `Steal complete: +1 ${meta.label}${normalizeMutation(msg.mutation || "normal") === "normal" ? "" : ` ${mutationBadge(msg.mutation)}`} block.`;
+              addLuckyBlock(String(msg.blockKey || "basic"), 1, normalizeMutation(msg.mutation || "normal"), normalizeTrait(msg.trait || "none"));
+              state.info = `Steal complete: +1 ${meta.label}${normalizeMutation(msg.mutation || "normal") === "normal" ? "" : ` ${mutationBadge(msg.mutation)}`}${normalizeTrait(msg.trait || "none") === "leprechaun" ? " [Leprechaun]" : ""} block.`;
             }
             updateUI();
           } else if (String(msg.ownerId || "") === multiplayer.playerId) {
@@ -9811,6 +10201,7 @@
                 pedestals[idx].blockRankKey = null;
                 pedestals[idx].blockBlueMoon = false;
                 pedestals[idx].blockMutation = "normal";
+                pedestals[idx].blockTrait = "none";
                 pedestals[idx].block.visible = false;
                 clearMeshLabel(pedestals[idx].block);
               }
@@ -9858,14 +10249,15 @@
           const blockKey = normalizeBlockKey(String(msg.blockKey || msg.rankKey || "basic"));
           const amount = Math.max(0, Number(msg.amount || 0));
           const mutation = normalizeMutation(msg.mutation || (msg.blueMoon ? "bluemoon" : (msg.soulbound ? "soulbound" : "normal")));
+          const trait = normalizeTrait(msg.trait || "none");
           const giveId = String(msg.giveId || "");
           if (giveId && pendingAdminGiveIds.has(giveId)) {
             pendingAdminGiveIds.delete(giveId);
           } else if (amount > 0) {
-            addLuckyBlock(blockKey, amount, mutation);
+            addLuckyBlock(blockKey, amount, mutation, trait);
           }
           const blockMeta = blockMetaByKey(blockKey);
-          state.info = `Received ${amount} ${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`} lucky block(s) from ${String(msg.from || "Admin")}.`;
+          state.info = `Received ${amount} ${blockMeta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} lucky block(s) from ${String(msg.from || "Admin")}.`;
           updateUI();
           return;
         }

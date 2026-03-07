@@ -22,7 +22,7 @@ const RANK_KEYS = new Set([
   "basic", "common", "rare", "epic", "legendary",
   "mythic", "godly", "secret", "transcendent", "omniversal"
 ]);
-const SPECIAL_BLOCK_KEYS = new Set(["valentinesblock"]);
+const SPECIAL_BLOCK_KEYS = new Set(["valentinesblock", "leprechaunblock", "adminblock", "godlyblock"]);
 const DAILY_STARDUST_LOOP = [
   { day: 1, stardust: 5, luckyRankKey: "common" },
   { day: 2, stardust: 10, luckyRankKey: "rare" },
@@ -270,8 +270,25 @@ function ensurePlayerDataShape(player, slot = 0) {
   if (!out.data.state.specialLuckyInventory || typeof out.data.state.specialLuckyInventory !== "object") {
     out.data.state.specialLuckyInventory = {};
   }
-  if (!out.data.state.specialLuckyInventory.valentinesblock || typeof out.data.state.specialLuckyInventory.valentinesblock !== "object") {
-    out.data.state.specialLuckyInventory.valentinesblock = { normal: 0, bluemoon: 0, soulbound: 0 };
+  if (!out.data.state.luckyTraitInventory || typeof out.data.state.luckyTraitInventory !== "object") {
+    out.data.state.luckyTraitInventory = {};
+  }
+  if (!out.data.state.luckyMoonTraitInventory || typeof out.data.state.luckyMoonTraitInventory !== "object") {
+    out.data.state.luckyMoonTraitInventory = {};
+  }
+  if (!out.data.state.luckySoulboundTraitInventory || typeof out.data.state.luckySoulboundTraitInventory !== "object") {
+    out.data.state.luckySoulboundTraitInventory = {};
+  }
+  if (!out.data.state.specialLuckyTraitInventory || typeof out.data.state.specialLuckyTraitInventory !== "object") {
+    out.data.state.specialLuckyTraitInventory = {};
+  }
+  for (const key of SPECIAL_BLOCK_KEYS) {
+    if (!out.data.state.specialLuckyInventory[key] || typeof out.data.state.specialLuckyInventory[key] !== "object") {
+      out.data.state.specialLuckyInventory[key] = { normal: 0, bluemoon: 0, soulbound: 0 };
+    }
+    if (!out.data.state.specialLuckyTraitInventory[key] || typeof out.data.state.specialLuckyTraitInventory[key] !== "object") {
+      out.data.state.specialLuckyTraitInventory[key] = { normal: 0, bluemoon: 0, soulbound: 0 };
+    }
   }
   out.data.state.rebirths = Math.max(0, Math.min(MAX_REBIRTHS, Math.floor(Number(out.data.state.rebirths || 0))));
   out.data.state.personalLuck = Math.max(1, Math.min(PERSONAL_LUCK_MAX, Math.floor(Number(out.data.state.personalLuck || 1))));
@@ -475,10 +492,17 @@ function isValidCreatureNameForRank(rankKey, creatureName) {
 
 function normalizeRankKey(v) {
   const raw = String(v || "").trim().toLowerCase();
+  if (raw === "admin") return "adminblock";
+  if (raw === "godlyblock") return "godlyblock";
+  if (raw === "lepblock" || raw === "leprechaun" || raw === "leprechaunblock") return "leprechaunblock";
+  if (raw === "valentine" || raw === "valentines" || raw === "valentinesblock" || raw === "valentineblock") return "valentinesblock";
   if (raw === "divine") return "transcendent";
   if (raw === "eternal" || raw === "eturnal") return "transcendent";
   if (raw === "uncommon") return "common";
   if (raw === "elite") return "rare";
+  if (raw === "leprechaun" || raw === "lepricahaun" || raw === "leprichan") return "leprechaunblock";
+  if (raw === "admin") return "adminblock";
+  if (raw === "godlyblock" || raw === "godly_block") return "godlyblock";
   if (raw === "prismatic" || raw === "apex" || raw === "ascended" || raw === "ancient" || raw === "celestial") return "transcendent";
   return raw;
 }
@@ -495,6 +519,14 @@ function normalizeMutation(v) {
     return "soulbound";
   }
   return "normal";
+}
+
+function normalizeTrait(v) {
+  const raw = String(v || "").trim().toLowerCase();
+  if (raw === "leprechaun" || raw === "lep" || raw === "lepricahaun" || raw === "leprichan" || raw === "leprechauntrait") {
+    return "leprechaun";
+  }
+  return "none";
 }
 
 function normalizeBatKey(v) {
@@ -549,6 +581,7 @@ function resolveStealTargetFromSnapshot(snapshot, pedestalIndex) {
       itemType: "block",
       rankKey: normalizeRankKey(ped.blockRankKey || "basic"),
       mutation: normalizeMutation(ped.blockMutation || (ped.blockBlueMoon ? "bluemoon" : "normal")),
+      trait: normalizeTrait(ped.blockTrait || "none"),
       creatureId: "",
       creatureName: "",
       creatureRate: 0
@@ -560,6 +593,7 @@ function resolveStealTargetFromSnapshot(snapshot, pedestalIndex) {
     itemType: "creature",
     rankKey: normalizeRankKey(creature.rankKey || "basic"),
     mutation: normalizeMutation(creature.mutation || (creature.blueMoon ? "bluemoon" : "normal")),
+    trait: normalizeTrait(creature.trait || "none"),
     creatureId: String(creature.id || ""),
     creatureName: String(creature.name || "Creature"),
     creatureRate: Number(creature.rate || 0)
@@ -573,13 +607,15 @@ function lockRecentlyStolenPedestal(serverState, ownerId, pedestalIndex, meta = 
   const mode = String(meta.mode || "stolen");
   const blockKey = normalizeRankKey(meta.blockKey || "basic");
   const mutation = normalizeMutation(meta.mutation || "normal");
+  const trait = normalizeTrait(meta.trait || "none");
   const creatureMeta = meta.creature && typeof meta.creature === "object"
     ? {
       id: String(meta.creature.id || ""),
       name: String(meta.creature.name || "Creature"),
       rankKey: normalizeRankKey(meta.creature.rankKey || blockKey || "basic"),
       rate: Math.max(1, Number(meta.creature.rate || 1)),
-      mutation: normalizeMutation(meta.creature.mutation || mutation || "normal")
+      mutation: normalizeMutation(meta.creature.mutation || mutation || "normal"),
+      trait: normalizeTrait(meta.creature.trait || trait || "none")
     }
     : null;
   let perPlayer = serverState.recentlyStolenByPlayer.get(owner);
@@ -593,6 +629,7 @@ function lockRecentlyStolenPedestal(serverState, ownerId, pedestalIndex, meta = 
     itemType: String(meta.itemType || "block"),
     blockKey,
     mutation,
+    trait,
     creatureId: String(meta.creatureId || ""),
     creature: creatureMeta,
     pedestalId: pedestalIdFromIndex(idx),
@@ -619,6 +656,7 @@ function ensurePedestalsArray(playerData) {
       blockRankKey: null,
       blockBlueMoon: false,
       blockMutation: "normal",
+      blockTrait: "none",
       creatureId: ""
     });
   }
@@ -660,6 +698,7 @@ function applyRecentStealSaveGuards(serverState, playerId, incomingData) {
           rankKey: normalizeRankKey(lock.creature.rankKey || lock.blockKey || "basic"),
           rate: Math.max(1, Number(lock.creature.rate || 1)),
           mutation: normalizeMutation(lock.creature.mutation || lock.mutation || "normal"),
+          trait: normalizeTrait(lock.creature.trait || lock.trait || "none"),
           blueMoon: normalizeMutation(lock.creature.mutation || lock.mutation || "normal") === "bluemoon",
           pedestalId: stolenPedId
         };
@@ -678,12 +717,14 @@ function applyRecentStealSaveGuards(serverState, playerId, incomingData) {
           blockRankKey: null,
           blockBlueMoon: false,
           blockMutation: "normal",
+          blockTrait: "none",
           creatureId: c.id || hadCreature || ""
         };
         if (hadBlock || hadCreature !== (c.id || hadCreature || "")) changed = true;
       } else {
         const blockKey = normalizeRankKey(lock?.blockKey || "basic");
         const mutation = normalizeMutation(lock?.mutation || "normal");
+        const trait = normalizeTrait(lock?.trait || "none");
         const before = creatures.length;
         creatures = creatures.filter((it) => String(it?.pedestalId || "") !== stolenPedId);
         if (creatures.length !== before) changed = true;
@@ -697,6 +738,7 @@ function applyRecentStealSaveGuards(serverState, playerId, incomingData) {
           blockRankKey: blockKey,
           blockBlueMoon: mutation === "bluemoon",
           blockMutation: mutation,
+          blockTrait: trait,
           creatureId: ""
         };
         if (!had) changed = true;
@@ -710,6 +752,7 @@ function applyRecentStealSaveGuards(serverState, playerId, incomingData) {
         ped.blockRankKey = null;
         ped.blockBlueMoon = false;
         ped.blockMutation = "normal";
+        ped.blockTrait = "none";
         changed = true;
       }
       if (String(ped.creatureId || "")) {
@@ -1319,6 +1362,7 @@ function normalizeSpawnDrop(raw) {
     rankKey: normalizeRankKey(raw.rankKey || "basic"),
     rate: Math.max(1, Number(raw.rate || 1)),
     mutation: normalizeMutation(raw.mutation || "normal"),
+    trait: normalizeTrait(raw.trait || "none"),
     x: Number(raw.x || SPAWN_DROP_CENTER.x),
     z: Number(raw.z || SPAWN_DROP_CENTER.z),
     spawnedAt: Number(raw.spawnedAt || Date.now())
@@ -1345,7 +1389,7 @@ function nextSpawnDropPosition(serverState) {
   };
 }
 
-function addSpawnDrop(serverState, creatureSpec, mutation = "normal") {
+function addSpawnDrop(serverState, creatureSpec, mutation = "normal", trait = "none") {
   if (!serverState || !creatureSpec || typeof creatureSpec !== "object") return null;
   const pos = nextSpawnDropPosition(serverState);
   const drop = {
@@ -1355,6 +1399,7 @@ function addSpawnDrop(serverState, creatureSpec, mutation = "normal") {
     rankKey: normalizeRankKey(creatureSpec.rankKey || "basic"),
     rate: Math.max(1, Number(creatureSpec.rate || 1)),
     mutation: normalizeMutation(mutation || "normal"),
+    trait: normalizeTrait(trait || "none"),
     x: pos.x,
     z: pos.z,
     spawnedAt: Date.now()
@@ -1453,7 +1498,8 @@ function buildWorldSnapshot(data) {
       seedRankKey: normalizeRankKey(p?.seedRankKey || "basic"),
       plantedAt: Number(p?.plantedAt || 0),
       growDuration: Number(p?.growDuration || 0),
-      blueMoon: !!p?.blueMoon
+      blueMoon: !!p?.blueMoon,
+      leprechaunTrait: !!p?.leprechaunTrait
     };
   });
   const pedestals = pedIn.slice(0, maxPedestals).map((p) => ({
@@ -1461,6 +1507,7 @@ function buildWorldSnapshot(data) {
     blockRankKey: normalizeRankKey(p?.blockRankKey || "basic"),
     blockMutation: normalizeMutation(p?.blockMutation || (p?.blockBlueMoon ? "bluemoon" : "normal")),
     blockBlueMoon: normalizeMutation(p?.blockMutation || (p?.blockBlueMoon ? "bluemoon" : "normal")) === "bluemoon",
+    blockTrait: normalizeTrait(p?.blockTrait || "none"),
     creatureId: String(p?.creatureId || "")
   }));
   const creatures = creaturesIn.slice(0, Math.max(48, maxPedestals * 3)).map((c) => ({
@@ -1470,6 +1517,7 @@ function buildWorldSnapshot(data) {
     rate: Number(c?.rate || 0),
     mutation: normalizeMutation(c?.mutation || (c?.blueMoon ? "bluemoon" : "normal")),
     blueMoon: normalizeMutation(c?.mutation || (c?.blueMoon ? "bluemoon" : "normal")) === "bluemoon",
+    trait: normalizeTrait(c?.trait || "none"),
     pedestalId: String(c?.pedestalId || "")
   }));
   return {
@@ -1551,6 +1599,7 @@ function carriedPayloadForClient(carry) {
     itemType: String(carry.itemType || "block"),
     blockKey: normalizeRankKey(carry.blockKey || "basic"),
     mutation: normalizeMutation(carry.mutation || "normal"),
+    trait: normalizeTrait(carry.trait || "none"),
     sourcePedestalIndex: clampPedestalIndex(carry.sourcePedestalIndex || 0, maxPedestals),
     sourcePedestalId: pedestalIdFromIndex(clampPedestalIndex(carry.sourcePedestalIndex || 0, maxPedestals)),
     creature: carry.creature && typeof carry.creature === "object"
@@ -1559,7 +1608,8 @@ function carriedPayloadForClient(carry) {
         name: String(carry.creature.name || "Creature"),
         rankKey: normalizeRankKey(carry.creature.rankKey || "basic"),
         rate: Number(carry.creature.rate || 0),
-        mutation: normalizeMutation(carry.creature.mutation || "normal")
+        mutation: normalizeMutation(carry.creature.mutation || "normal"),
+        trait: normalizeTrait(carry.creature.trait || "none")
       }
       : null,
     grabbedAt: Number(carry.grabbedAt || Date.now())
@@ -1623,6 +1673,7 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
         rate: Math.max(1, Number(carry.creature.rate || 1)),
         mutation: normalizeMutation(carry.creature.mutation || carry.mutation || "normal"),
         blueMoon: normalizeMutation(carry.creature.mutation || carry.mutation || "normal") === "bluemoon",
+        trait: normalizeTrait(carry.creature.trait || carry.trait || "none"),
         pedestalId: null
       };
       let targetIdx = sourceIdx;
@@ -1638,7 +1689,8 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
           hasBlock: false,
           blockRankKey: null,
           blockBlueMoon: false,
-          blockMutation: "normal"
+          blockMutation: "normal",
+          blockTrait: "none"
         };
         restoredToPedestal = true;
         restoredPedestalIndex = targetIdx;
@@ -1653,7 +1705,8 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
         name: creature.name,
         rankKey: creature.rankKey,
         rate: creature.rate,
-        mutation: creature.mutation
+        mutation: creature.mutation,
+        trait: creature.trait
       };
     } else {
       const sourcePed = pedestals[sourceIdx];
@@ -1663,20 +1716,38 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
           hasBlock: true,
           blockRankKey: normalizeRankKey(carry.blockKey || "basic"),
           blockBlueMoon: normalizeMutation(carry.mutation || "normal") === "bluemoon",
-          blockMutation: normalizeMutation(carry.mutation || "normal")
+          blockMutation: normalizeMutation(carry.mutation || "normal"),
+          blockTrait: normalizeTrait(carry.trait || "none")
         };
         restoredToPedestal = true;
         restoredPedestalIndex = sourceIdx;
-      } else if (normalizeMutation(carry.mutation || "normal") === "bluemoon") {
-        if (!owner.data.state.luckyMoonInventory || typeof owner.data.state.luckyMoonInventory !== "object") owner.data.state.luckyMoonInventory = {};
-        const key = normalizeRankKey(carry.blockKey || "basic");
-        owner.data.state.luckyMoonInventory[key] = parsePositiveInt(owner.data.state.luckyMoonInventory[key] || 0, 0) + 1;
-      } else if (normalizeMutation(carry.mutation || "normal") === "soulbound") {
-        if (!owner.data.state.luckySoulboundInventory || typeof owner.data.state.luckySoulboundInventory !== "object") owner.data.state.luckySoulboundInventory = {};
-        const key = normalizeRankKey(carry.blockKey || "basic");
-        owner.data.state.luckySoulboundInventory[key] = parsePositiveInt(owner.data.state.luckySoulboundInventory[key] || 0, 0) + 1;
       } else {
-        addLuckyByRank(owner.data.state, carry.blockKey || "basic", 1);
+        const key = normalizeRankKey(carry.blockKey || "basic");
+        const mutation = normalizeMutation(carry.mutation || "normal");
+        const trait = normalizeTrait(carry.trait || "none");
+        const isSpecial = SPECIAL_BLOCK_KEYS.has(key);
+        if (isSpecial) {
+          const specialBucket = trait === "leprechaun" ? "specialLuckyTraitInventory" : "specialLuckyInventory";
+          if (!owner.data.state[specialBucket] || typeof owner.data.state[specialBucket] !== "object") owner.data.state[specialBucket] = {};
+          if (!owner.data.state[specialBucket][key] || typeof owner.data.state[specialBucket][key] !== "object") {
+            owner.data.state[specialBucket][key] = { normal: 0, bluemoon: 0, soulbound: 0 };
+          }
+          owner.data.state[specialBucket][key][mutation] = parsePositiveInt(owner.data.state[specialBucket][key][mutation] || 0, 0) + 1;
+        } else if (trait === "leprechaun") {
+          const bucket = mutation === "bluemoon"
+            ? "luckyMoonTraitInventory"
+            : (mutation === "soulbound" ? "luckySoulboundTraitInventory" : "luckyTraitInventory");
+          if (!owner.data.state[bucket] || typeof owner.data.state[bucket] !== "object") owner.data.state[bucket] = {};
+          owner.data.state[bucket][key] = parsePositiveInt(owner.data.state[bucket][key] || 0, 0) + 1;
+        } else if (mutation === "bluemoon") {
+          if (!owner.data.state.luckyMoonInventory || typeof owner.data.state.luckyMoonInventory !== "object") owner.data.state.luckyMoonInventory = {};
+          owner.data.state.luckyMoonInventory[key] = parsePositiveInt(owner.data.state.luckyMoonInventory[key] || 0, 0) + 1;
+        } else if (mutation === "soulbound") {
+          if (!owner.data.state.luckySoulboundInventory || typeof owner.data.state.luckySoulboundInventory !== "object") owner.data.state.luckySoulboundInventory = {};
+          owner.data.state.luckySoulboundInventory[key] = parsePositiveInt(owner.data.state.luckySoulboundInventory[key] || 0, 0) + 1;
+        } else {
+          addLuckyByRank(owner.data.state, key, 1);
+        }
       }
     }
 
@@ -1691,6 +1762,7 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
       itemType: carry.itemType || "block",
       blockKey: carry.blockKey || "basic",
       mutation: carry.mutation || "normal",
+      trait: carry.trait || "none",
       creatureId: restoredCreature?.id || carry.creature?.id || "",
       creature: restoredCreature
     });
@@ -1745,6 +1817,7 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
       rate: Math.max(1, Number(carry.creature.rate || 1)),
       mutation: normalizeMutation(carry.creature.mutation || carry.mutation || "normal"),
       blueMoon: normalizeMutation(carry.creature.mutation || carry.mutation || "normal") === "bluemoon",
+      trait: normalizeTrait(carry.creature.trait || carry.trait || "none"),
       pedestalId: pedestalIdFromIndex(idx)
     };
     thiefDoc.data.creatures = creatures.filter((c) => String(c?.id || "") !== creature.id);
@@ -1755,7 +1828,8 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
       hasBlock: false,
       blockRankKey: null,
       blockBlueMoon: false,
-      blockMutation: "normal"
+      blockMutation: "normal",
+      blockTrait: "none"
     };
   } else {
     pedestals[idx] = {
@@ -1764,6 +1838,7 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
       blockRankKey: normalizeRankKey(carry.blockKey || "basic"),
       blockBlueMoon: normalizeMutation(carry.mutation || "normal") === "bluemoon",
       blockMutation: normalizeMutation(carry.mutation || "normal"),
+      blockTrait: normalizeTrait(carry.trait || "none"),
       creatureId: ""
     };
   }
@@ -1816,6 +1891,7 @@ async function completeSteal(serverState, steal) {
   const itemType = String(steal.itemType || "block");
   const blockKey = normalizeRankKey(steal.blockRankKey || "basic");
   const mutation = normalizeMutation(steal.blockMutation || "normal");
+  const trait = normalizeTrait(steal.blockTrait || "none");
   const wantedCreatureId = String(steal.creatureId || "");
 
   try {
@@ -1843,6 +1919,7 @@ async function completeSteal(serverState, steal) {
       itemType,
       blockKey,
       mutation,
+      trait,
       creature: null,
       grabbedAt: Date.now()
     };
@@ -1875,17 +1952,19 @@ async function completeSteal(serverState, steal) {
         name: String(picked.name || steal.creatureName || "Creature"),
         rankKey: normalizeRankKey(picked.rankKey || blockKey || "basic"),
         rate: Math.max(1, Number(picked.rate || steal.creatureRate || 1)),
-        mutation: pickedMutation
+        mutation: pickedMutation,
+        trait: normalizeTrait(picked.trait || trait || "none")
       };
     } else {
       const livePed = ownerPedestals[pedIndex];
       const liveKey = normalizeRankKey(livePed?.blockRankKey || "basic");
       const liveMutation = normalizeMutation(livePed?.blockMutation || (livePed?.blockBlueMoon ? "bluemoon" : "normal"));
+      const liveTrait = normalizeTrait(livePed?.blockTrait || "none");
       if (!livePed || !livePed.hasBlock) {
         cancelSteal(serverState, steal, "missing");
         return;
       }
-      if (liveKey !== blockKey || liveMutation !== mutation) {
+      if (liveKey !== blockKey || liveMutation !== mutation || liveTrait !== trait) {
         cancelSteal(serverState, steal, "changed");
         return;
       }
@@ -1898,7 +1977,8 @@ async function completeSteal(serverState, steal) {
         hasBlock: false,
         blockRankKey: null,
         blockBlueMoon: false,
-        blockMutation: "normal"
+        blockMutation: "normal",
+        blockTrait: "none"
       };
     }
 
@@ -1910,6 +1990,7 @@ async function completeSteal(serverState, steal) {
       itemType,
       blockKey,
       mutation,
+      trait,
       creatureId: sourceCreatureId
     });
     serverState.activeSnapshots.set(ownerId, buildWorldSnapshot(owner.data || {}));
@@ -1974,9 +2055,11 @@ async function processServerSteals(serverState) {
       const currentType = String(target.itemType || "block");
       const currentKey = normalizeRankKey(target.rankKey || "basic");
       const currentMutation = normalizeMutation(target.mutation || "normal");
+      const currentTrait = normalizeTrait(target.trait || "none");
       if (currentType !== String(steal.itemType || "block")
         || currentKey !== normalizeRankKey(steal.blockRankKey || "basic")
-        || currentMutation !== normalizeMutation(steal.blockMutation || "normal")) {
+        || currentMutation !== normalizeMutation(steal.blockMutation || "normal")
+        || currentTrait !== normalizeTrait(steal.blockTrait || "none")) {
         cancelSteal(serverState, steal, "changed");
         continue;
       }
@@ -2810,6 +2893,7 @@ app.post("/api/steal/start", async (req, res) => {
     }
     const rankKey = normalizeRankKey(target.rankKey || "basic");
     const mutation = normalizeMutation(target.mutation || "normal");
+    const trait = normalizeTrait(target.trait || "none");
     const durationSec = getStealTimeForRank(rankKey);
     const startAt = Date.now();
     const steal = {
@@ -2821,6 +2905,7 @@ app.post("/api/steal/start", async (req, res) => {
       itemType: String(target.itemType || "block"),
       blockRankKey: rankKey,
       blockMutation: mutation,
+      blockTrait: trait,
       creatureId: String(target.creatureId || ""),
       creatureName: String(target.creatureName || ""),
       creatureRate: Number(target.creatureRate || 0),
@@ -2891,12 +2976,14 @@ app.post("/api/spawn/grab", async (req, res) => {
       itemType: "creature",
       blockKey: normalizeRankKey(drop.rankKey || "basic"),
       mutation: normalizeMutation(drop.mutation || "normal"),
+      trait: normalizeTrait(drop.trait || "none"),
       creature: {
         id: `spawn-${spawnId}`,
         name: String(drop.name || "Creature"),
         rankKey: normalizeRankKey(drop.rankKey || "basic"),
         rate: Math.max(1, Number(drop.rate || 1)),
-        mutation: normalizeMutation(drop.mutation || "normal")
+        mutation: normalizeMutation(drop.mutation || "normal"),
+        trait: normalizeTrait(drop.trait || "none")
       },
       grabbedAt: Date.now()
     };
@@ -3335,6 +3422,7 @@ app.post("/api/admin/give", async (req, res) => {
     const amountRaw = Number(req.body?.amount);
     const amount = Number.isFinite(amountRaw) && amountRaw >= 1 ? Math.floor(amountRaw) : 1;
     const mutation = normalizeMutation(req.body?.mutation || "normal");
+    const trait = normalizeTrait(req.body?.trait || "none");
     const blueMoon = mutation === "bluemoon";
     const soulbound = mutation === "soulbound";
     const isSpecial = SPECIAL_BLOCK_KEYS.has(blockKey);
@@ -3382,14 +3470,26 @@ app.post("/api/admin/give", async (req, res) => {
       if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") {
         target.data.state.specialLuckyInventory = {};
       }
+      if (!target.data.state.luckyTraitInventory || typeof target.data.state.luckyTraitInventory !== "object") {
+        target.data.state.luckyTraitInventory = {};
+      }
+      if (!target.data.state.luckySoulboundTraitInventory || typeof target.data.state.luckySoulboundTraitInventory !== "object") {
+        target.data.state.luckySoulboundTraitInventory = {};
+      }
+      if (!target.data.state.specialLuckyTraitInventory || typeof target.data.state.specialLuckyTraitInventory !== "object") {
+        target.data.state.specialLuckyTraitInventory = {};
+      }
       if (isSpecial) {
         const safeBlock = blockKey;
-        if (!target.data.state.specialLuckyInventory[safeBlock] || typeof target.data.state.specialLuckyInventory[safeBlock] !== "object") {
-          target.data.state.specialLuckyInventory[safeBlock] = { normal: 0, bluemoon: 0, soulbound: 0 };
+        const specialBucket = trait === "leprechaun" ? "specialLuckyTraitInventory" : "specialLuckyInventory";
+        if (!target.data.state[specialBucket][safeBlock] || typeof target.data.state[specialBucket][safeBlock] !== "object") {
+          target.data.state[specialBucket][safeBlock] = { normal: 0, bluemoon: 0, soulbound: 0 };
         }
-        target.data.state.specialLuckyInventory[safeBlock][mutation] = parsePositiveInt(target.data.state.specialLuckyInventory[safeBlock][mutation] || 0, 0) + add;
+        target.data.state[specialBucket][safeBlock][mutation] = parsePositiveInt(target.data.state[specialBucket][safeBlock][mutation] || 0, 0) + add;
       } else {
-        const bucket = soulbound ? "luckySoulboundInventory" : (blueMoon ? "luckyMoonInventory" : "luckyInventory");
+        const bucket = trait === "leprechaun"
+          ? (soulbound ? "luckySoulboundTraitInventory" : (blueMoon ? "luckyMoonTraitInventory" : "luckyTraitInventory"))
+          : (soulbound ? "luckySoulboundInventory" : (blueMoon ? "luckyMoonInventory" : "luckyInventory"));
         target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + add;
       }
     }
@@ -3403,6 +3503,7 @@ app.post("/api/admin/give", async (req, res) => {
       rankKey: blockKey,
       blockKey,
       mutation,
+      trait,
       amount: add,
       stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
       blueMoon,
@@ -3420,6 +3521,7 @@ app.post("/api/admin/give", async (req, res) => {
       amount: add,
       stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
       mutation,
+      trait,
       blueMoon,
       soulbound,
       giveId
@@ -3449,6 +3551,7 @@ app.post("/api/admin/spawn", async (req, res) => {
     const blockKeyRaw = String(req.body?.blockKey || req.body?.rankKey || req.body?.blockType || "").trim();
     const blockKey = normalizeRankKey(blockKeyRaw);
     const mutation = normalizeMutation(req.body?.mutation || "normal");
+    const trait = normalizeTrait(req.body?.trait || "none");
     const isSpecialBlock = SPECIAL_BLOCK_KEYS.has(blockKey);
     const isLuckyBlockSpawn = !!blockKeyRaw && (RANK_KEYS.has(blockKey) || isSpecialBlock);
     const creatureInput = String(req.body?.creatureName || req.body?.name || "").trim();
@@ -3497,14 +3600,21 @@ app.post("/api/admin/spawn", async (req, res) => {
         if (!target.data.state.luckyMoonInventory || typeof target.data.state.luckyMoonInventory !== "object") target.data.state.luckyMoonInventory = {};
         if (!target.data.state.luckySoulboundInventory || typeof target.data.state.luckySoulboundInventory !== "object") target.data.state.luckySoulboundInventory = {};
         if (!target.data.state.specialLuckyInventory || typeof target.data.state.specialLuckyInventory !== "object") target.data.state.specialLuckyInventory = {};
+        if (!target.data.state.luckyTraitInventory || typeof target.data.state.luckyTraitInventory !== "object") target.data.state.luckyTraitInventory = {};
+        if (!target.data.state.luckyMoonTraitInventory || typeof target.data.state.luckyMoonTraitInventory !== "object") target.data.state.luckyMoonTraitInventory = {};
+        if (!target.data.state.luckySoulboundTraitInventory || typeof target.data.state.luckySoulboundTraitInventory !== "object") target.data.state.luckySoulboundTraitInventory = {};
+        if (!target.data.state.specialLuckyTraitInventory || typeof target.data.state.specialLuckyTraitInventory !== "object") target.data.state.specialLuckyTraitInventory = {};
 
         if (isSpecialBlock) {
-          if (!target.data.state.specialLuckyInventory[blockKey] || typeof target.data.state.specialLuckyInventory[blockKey] !== "object") {
-            target.data.state.specialLuckyInventory[blockKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
+          const specialBucket = trait === "leprechaun" ? "specialLuckyTraitInventory" : "specialLuckyInventory";
+          if (!target.data.state[specialBucket][blockKey] || typeof target.data.state[specialBucket][blockKey] !== "object") {
+            target.data.state[specialBucket][blockKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
           }
-          target.data.state.specialLuckyInventory[blockKey][mutation] = parsePositiveInt(target.data.state.specialLuckyInventory[blockKey][mutation] || 0, 0) + amount;
+          target.data.state[specialBucket][blockKey][mutation] = parsePositiveInt(target.data.state[specialBucket][blockKey][mutation] || 0, 0) + amount;
         } else {
-          const bucket = mutation === "soulbound" ? "luckySoulboundInventory" : (mutation === "bluemoon" ? "luckyMoonInventory" : "luckyInventory");
+          const bucket = trait === "leprechaun"
+            ? (mutation === "soulbound" ? "luckySoulboundTraitInventory" : (mutation === "bluemoon" ? "luckyMoonTraitInventory" : "luckyTraitInventory"))
+            : (mutation === "soulbound" ? "luckySoulboundInventory" : (mutation === "bluemoon" ? "luckyMoonInventory" : "luckyInventory"));
           target.data.state[bucket][blockKey] = parsePositiveInt(target.data.state[bucket][blockKey] || 0, 0) + amount;
         }
 
@@ -3520,6 +3630,7 @@ app.post("/api/admin/spawn", async (req, res) => {
             rankKey: blockKey,
             blockKey,
             mutation,
+            trait,
             amount,
             stardust: parsePositiveInt(target.data.state.stardust || 0, 0),
             blueMoon: mutation === "bluemoon",
@@ -3535,6 +3646,7 @@ app.post("/api/admin/spawn", async (req, res) => {
         serverId,
         blockKey,
         mutation,
+        trait,
         amount,
         spawned: recipients * amount,
         recipients,
@@ -3764,7 +3876,14 @@ app.post("/api/admin/event", async (req, res) => {
     }
 
     const eventName = String(req.body?.event || "").trim().toLowerCase();
-    if (eventName !== "bluemoon" && eventName !== "blue_moon" && eventName !== "blue-moon") {
+    const isFrenzyEvent = eventName === "bluemoon"
+      || eventName === "blue_moon"
+      || eventName === "blue-moon"
+      || eventName === "leprechaunfrenzy"
+      || eventName === "leprechaun_frenzy"
+      || eventName === "leprechaun-frenzy"
+      || eventName === "frenzy";
+    if (!isFrenzyEvent) {
       res.status(400).json({ error: "unsupported event" });
       return;
     }
@@ -3795,7 +3914,7 @@ app.post("/api/admin/event", async (req, res) => {
 
     res.json({
       ok: true,
-      event: "bluemoon",
+      event: "leprechaunfrenzy",
       scope,
       serverId,
       durationSec,
