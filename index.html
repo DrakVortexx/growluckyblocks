@@ -2742,6 +2742,8 @@
     const worldSpawnInteractables = [];
     const treadmillSceneMeshes = [];
     const treadmillClaimFx = [];
+    const treadmillSpawnQueue = [];
+    let treadmillNextSpawnTime = 0;
     let remoteSlotSignature = "";
     let remoteDetailSignature = "";
     let worldSpawnSignature = "";
@@ -5807,6 +5809,37 @@
       }
     }
 
+    function processTreadmillSpawnQueue() {
+      const now = Date.now();
+      for (let i = treadmillSpawnQueue.length - 1; i >= 0; i--) {
+        const item = treadmillSpawnQueue[i];
+        if (!item || now < item.spawnTime) continue;
+        
+        // Spawn the creature
+        const pedIdx = Math.max(0, Math.floor(Number(item.result?.pedestalIndex || 0)));
+        const ped = pedestals[pedIdx] || null;
+        const targetPos = ped?.position || new THREE.Vector3(player.pos.x, 0, player.pos.z);
+        const fxMesh = createCreatureMesh(item.drop.rankKey, item.drop.name);
+        const startPos = worldDropLivePosition(item.drop, Date.now());
+        fxMesh.position.set(startPos.x, 1.2, startPos.z);
+        scene.add(fxMesh);
+        treadmillClaimFx.push({
+          mesh: fxMesh,
+          fromX: startPos.x,
+          fromY: 1.2,
+          fromZ: startPos.z,
+          toX: Number(targetPos.x || 0),
+          toY: 1.4,
+          toZ: Number(targetPos.z || 0),
+          startAt: performance.now() / 1000,
+          duration: 1.05
+        });
+        
+        // Remove from queue
+        treadmillSpawnQueue.splice(i, 1);
+      }
+    }
+
     function clearTreadmillVisual() {
       for (const mesh of treadmillSceneMeshes) scene.remove(mesh);
       treadmillSceneMeshes.length = 0;
@@ -5897,24 +5930,13 @@
           spawnId: drop.id
         });
         if (drop.source === "treadmill" && result?.autoDeposited) {
-          const pedIdx = Math.max(0, Math.floor(Number(result?.pedestalIndex || 0)));
-          const ped = pedestals[pedIdx] || null;
-          const targetPos = ped?.position || new THREE.Vector3(player.pos.x, 0, player.pos.z);
-          const fxMesh = createCreatureMesh(drop.rankKey, drop.name);
-          const startPos = worldDropLivePosition(drop, Date.now());
-          fxMesh.position.set(startPos.x, 1.2, startPos.z);
-          scene.add(fxMesh);
-          treadmillClaimFx.push({
-            mesh: fxMesh,
-            fromX: startPos.x,
-            fromY: 1.2,
-            fromZ: startPos.z,
-            toX: Number(targetPos.x || 0),
-            toY: 1.4,
-            toZ: Number(targetPos.z || 0),
-            startAt: performance.now() / 1000,
-            duration: 1.05
+          // Add to spawn queue for 3-second intervals
+          treadmillSpawnQueue.push({
+            drop: drop,
+            result: result,
+            spawnTime: Date.now() + (treadmillSpawnQueue.length * 3000) // 3-second intervals
           });
+          state.info = `${drop.name} claimed. It will arrive at your base in ${treadmillSpawnQueue.length * 3} seconds.`;
         }
         if (String(result?.itemType || "") === "block" || drop.itemType === "block") {
           const meta = blockMetaByKey(result?.blockKey || drop.blockKey || drop.rankKey || "basic");
@@ -5922,9 +5944,7 @@
           const trait = normalizeTrait(result?.trait || drop.trait || "none");
           state.info = `Grabbed ${meta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block.`;
         } else {
-          if (drop.source === "treadmill" && result?.autoDeposited) {
-            state.info = `${drop.name} claimed. It floated to your base pedestal.`;
-          } else {
+          if (drop.source !== "treadmill") {
             state.info = `Grabbed ${drop.name}. Carry it to your barn and press E on an empty pedestal.`;
           }
         }
@@ -10233,6 +10253,7 @@
       updateCrops(now);
       updateCreaturesAnim(now, dt);
       updateRemoteDetailVisuals(now);
+      processTreadmillSpawnQueue();
       updateWheelVisual(dt);
       updateMoneyPopups(dt);
       updateEconomy(now);
