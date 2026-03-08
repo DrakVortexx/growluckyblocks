@@ -5818,22 +5818,52 @@
         return;
       }
       if (treadmillSceneMeshes.length > 0) return;
+      // Dark border slab under the track
       const base = new THREE.Mesh(
-        new THREE.BoxGeometry(2.4, 0.2, 13.2),
-        new THREE.MeshStandardMaterial({ color: 0x2a2f33, roughness: 0.65, metalness: 0.25 })
+        new THREE.BoxGeometry(4.1, 0.22, 14.6),
+        new THREE.MeshStandardMaterial({ color: 0x2f2a2a, roughness: 0.72, metalness: 0.12 })
       );
-      base.position.set(15.8, 0.12, 0);
+      base.position.set(15.8, 0.11, 0);
       base.receiveShadow = true;
       base.castShadow = true;
       scene.add(base);
       treadmillSceneMeshes.push(base);
+
+      // Main red runway (matches the screenshot style)
       const lane = new THREE.Mesh(
-        new THREE.BoxGeometry(1.6, 0.05, 12.6),
-        new THREE.MeshStandardMaterial({ color: 0x1d5d2a, roughness: 0.35, metalness: 0.4, emissive: 0x0f2a14, emissiveIntensity: 0.25 })
+        new THREE.BoxGeometry(3.5, 0.05, 14.0),
+        new THREE.MeshStandardMaterial({
+          color: 0xe34a58,
+          roughness: 0.5,
+          metalness: 0.08,
+          emissive: 0x431015,
+          emissiveIntensity: 0.14
+        })
       );
-      lane.position.set(15.8, 0.25, 0);
+      lane.position.set(15.8, 0.255, 0);
       scene.add(lane);
       treadmillSceneMeshes.push(lane);
+
+      // Side curbs
+      const curbMat = new THREE.MeshStandardMaterial({ color: 0x6f3338, roughness: 0.58, metalness: 0.1 });
+      for (const side of [-1, 1]) {
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 14.2), curbMat);
+        curb.position.set(15.8 + side * 1.75, 0.29, 0);
+        scene.add(curb);
+        treadmillSceneMeshes.push(curb);
+      }
+
+      // Center lane dashes
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffe28a, roughness: 0.45, metalness: 0.15 });
+      const dashCount = 9;
+      const startZ = -6.2;
+      const gap = 1.45;
+      for (let i = 0; i < dashCount; i += 1) {
+        const dash = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.78), stripeMat);
+        dash.position.set(15.8, 0.29, startZ + i * gap);
+        scene.add(dash);
+        treadmillSceneMeshes.push(dash);
+      }
     }
 
     function worldDropLivePosition(drop, nowMs = Date.now()) {
