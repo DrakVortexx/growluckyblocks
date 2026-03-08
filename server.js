@@ -76,6 +76,9 @@ const PERSONAL_LUCK_MAX = 1000;
 const MAX_SERVER_SLOTS = 8;
 const PRIVATE_SERVER_CREATE_STARDUST_COST = 25;
 const SPAWN_DROP_CENTER = Object.freeze({ x: -10.5, z: 6.1 });
+const TREADMILL_SPAWN_START = Object.freeze({ x: 15.8, z: -6.4 });
+const TREADMILL_SPAWN_END = Object.freeze({ x: 15.8, z: 6.4 });
+const TREADMILL_DROP_SPEED = 1.8;
 const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Fat Cat", rankKey: "basic", rate: 2.30 },
   { name: "Tiny Bunny", rankKey: "basic", rate: 3.20 },
@@ -1357,6 +1360,10 @@ function normalizeSpawnDrop(raw) {
   if (!raw || typeof raw !== "object") return null;
   const itemType = String(raw.itemType || "creature").trim().toLowerCase() === "block" ? "block" : "creature";
   const rankKey = normalizeRankKey(raw.rankKey || raw.blockKey || "basic");
+  const source = String(raw.source || "spawn").trim().toLowerCase() === "treadmill" ? "treadmill" : "spawn";
+  const motionVx = Number(raw.motionVx || 0);
+  const motionVz = Number(raw.motionVz || 0);
+  const despawnAt = Number(raw.despawnAt || 0);
   return {
     id: String(raw.id || ""),
     serverId: cleanServerId(raw.serverId || DEFAULT_SERVER_ID),
@@ -1369,7 +1376,11 @@ function normalizeSpawnDrop(raw) {
     trait: normalizeTrait(raw.trait || "none"),
     x: Number(raw.x || SPAWN_DROP_CENTER.x),
     z: Number(raw.z || SPAWN_DROP_CENTER.z),
-    spawnedAt: Number(raw.spawnedAt || Date.now())
+    spawnedAt: Number(raw.spawnedAt || Date.now()),
+    source,
+    motionVx: Number.isFinite(motionVx) ? motionVx : 0,
+    motionVz: Number.isFinite(motionVz) ? motionVz : 0,
+    despawnAt: Number.isFinite(despawnAt) ? despawnAt : 0
   };
 }
 
@@ -1410,6 +1421,92 @@ function addSpawnDrop(serverState, creatureSpec, mutation = "normal", trait = "n
   };
   serverState.spawnDrops.set(drop.id, drop);
   return normalizeSpawnDrop(drop);
+}
+
+function rankWeightForSpawn(rankKey) {
+  switch (normalizeRankKey(rankKey)) {
+    case "basic": return 45;
+    case "common": return 25;
+    case "rare": return 12;
+    case "epic": return 7;
+    case "legendary": return 3;
+    case "mythic": return 1;
+    case "godly": return 0.1;
+    case "secret": return 0.01;
+    case "transcendent": return 0.0001;
+    case "omniversal": return 0.00001;
+    default: return 0.00001;
+  }
+}
+
+function rollCatalogCreature() {
+  const weighted = SPAWN_CREATURE_CATALOG.map((c) => ({
+    row: c,
+    weight: Math.max(0.0000001, rankWeightForSpawn(c.rankKey))
+  }));
+  const total = weighted.reduce((sum, w) => sum + Number(w.weight || 0), 0);
+  let roll = Math.random() * Math.max(0.0000001, total);
+  for (const entry of weighted) {
+    roll -= Number(entry.weight || 0);
+    if (roll <= 0) return entry.row;
+  }
+  return weighted[0]?.row || SPAWN_CREATURE_CATALOG[0];
+}
+
+function addTreadmillDrop(serverState, creatureSpec, mutation = "normal", trait = "none") {
+  if (!serverState || !creatureSpec || typeof creatureSpec !== "object") return null;
+  const start = { x: TREADMILL_SPAWN_START.x, z: TREADMILL_SPAWN_START.z };
+  const dx = Number(TREADMILL_SPAWN_END.x - TREADMILL_SPAWN_START.x);
+  const dz = Number(TREADMILL_SPAWN_END.z - TREADMILL_SPAWN_START.z);
+  const len = Math.max(0.0001, Math.hypot(dx, dz));
+  const travelSec = len / Math.max(0.01, TREADMILL_DROP_SPEED);
+  const now = Date.now();
+  const drop = {
+    id: `sp-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    serverId: serverState.id,
+    name: String(creatureSpec.name || "Creature"),
+    rankKey: normalizeRankKey(creatureSpec.rankKey || "basic"),
+    rate: Math.max(1, Number(creatureSpec.rate || 1)),
+    mutation: normalizeMutation(mutation || "normal"),
+    trait: normalizeTrait(trait || "none"),
+    x: start.x,
+    z: start.z,
+    spawnedAt: now,
+    source: "treadmill",
+    motionVx: (dx / len) * TREADMILL_DROP_SPEED,
+    motionVz: (dz / len) * TREADMILL_DROP_SPEED,
+    despawnAt: now + Math.ceil(travelSec * 1000)
+  };
+  serverState.spawnDrops.set(drop.id, drop);
+  return normalizeSpawnDrop(drop);
+}
+
+function pruneSpawnDrops(serverState, nowMs = Date.now()) {
+  if (!serverState || !(serverState.spawnDrops instanceof Map)) return false;
+  let changed = false;
+  for (const [dropId, raw] of serverState.spawnDrops.entries()) {
+    const drop = normalizeSpawnDrop(raw);
+    if (!drop) {
+      serverState.spawnDrops.delete(dropId);
+      changed = true;
+      continue;
+    }
+    if (Number(drop.despawnAt || 0) > 0 && Number(drop.despawnAt || 0) <= nowMs) {
+      serverState.spawnDrops.delete(dropId);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function spawnDropCurrentPosition(drop, nowMs = Date.now()) {
+  const safe = normalizeSpawnDrop(drop);
+  if (!safe) return { x: SPAWN_DROP_CENTER.x, z: SPAWN_DROP_CENTER.z };
+  const dt = Math.max(0, (nowMs - Number(safe.spawnedAt || nowMs)) / 1000);
+  return {
+    x: Number(safe.x || 0) + Number(safe.motionVx || 0) * dt,
+    z: Number(safe.z || 0) + Number(safe.motionVz || 0) * dt
+  };
 }
 
 function addSpawnBlockDrop(serverState, blockKey, mutation = "normal", trait = "none") {
@@ -2985,14 +3082,21 @@ app.post("/api/spawn/grab", async (req, res) => {
       res.status(404).json({ error: "spawn not found" });
       return;
     }
+    if (Number(drop.despawnAt || 0) > 0 && Number(drop.despawnAt || 0) <= Date.now()) {
+      serverState.spawnDrops.delete(spawnId);
+      broadcastWorld(serverState);
+      res.status(404).json({ error: "spawn expired" });
+      return;
+    }
     const playerPos = serverState.activePositions.get(playerId) || null;
-    if (!playerPos || distance2d(playerPos.x, playerPos.z, drop.x, drop.z) > 2.65) {
+    const livePos = spawnDropCurrentPosition(drop, Date.now());
+    if (!playerPos || distance2d(playerPos.x, playerPos.z, livePos.x, livePos.z) > 2.65) {
       res.status(400).json({ error: "too far from spawn drop" });
       return;
     }
 
-    serverState.spawnDrops.delete(spawnId);
     if (String(drop.itemType || "creature") === "block") {
+      serverState.spawnDrops.delete(spawnId);
       const player = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), serverState.activeSlots.get(playerId) ?? 0);
       const key = normalizeRankKey(drop.blockKey || drop.rankKey || "basic");
       const mutation = normalizeMutation(drop.mutation || "normal");
@@ -3040,6 +3144,65 @@ app.post("/api/spawn/grab", async (req, res) => {
       return;
     }
 
+    if (String(drop.source || "") === "treadmill") {
+      const player = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), serverState.activeSlots.get(playerId) ?? 0);
+      const pedestals = ensurePedestalsArray(player.data);
+      const targetIdx = pedestals.findIndex((p) => p && !p.hasBlock && !String(p.creatureId || ""));
+      if (targetIdx < 0) {
+        res.status(400).json({ error: "no empty pedestal" });
+        return;
+      }
+      serverState.spawnDrops.delete(spawnId);
+      const creatures = Array.isArray(player.data.creatures) ? player.data.creatures : [];
+      let creatureId = `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      while (creatures.some((c) => String(c?.id || "") === creatureId)) {
+        creatureId = `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+      const creature = {
+        id: creatureId,
+        name: String(drop.name || "Creature"),
+        rankKey: normalizeRankKey(drop.rankKey || "basic"),
+        rate: Math.max(1, Number(drop.rate || 1)),
+        mutation: normalizeMutation(drop.mutation || "normal"),
+        blueMoon: normalizeMutation(drop.mutation || "normal") === "bluemoon",
+        trait: normalizeTrait(drop.trait || "none"),
+        pedestalId: pedestalIdFromIndex(targetIdx)
+      };
+      player.data.creatures = creatures;
+      player.data.creatures.push(creature);
+      pedestals[targetIdx] = {
+        ...(pedestals[targetIdx] || {}),
+        creatureId: creature.id,
+        hasBlock: false,
+        blockRankKey: null,
+        blockBlueMoon: false,
+        blockMutation: "normal",
+        blockTrait: "none"
+      };
+      player.data.pedestals = pedestals;
+      await setPlayerDocMerge(playerId, { data: player.data, updatedAt: Date.now() }, decoded);
+      serverState.activeSnapshots.set(playerId, buildWorldSnapshot(player.data || {}));
+      broadcastStateSync(serverState, playerId);
+      broadcastWorld(serverState);
+      res.json({
+        ok: true,
+        itemType: "creature",
+        source: "treadmill",
+        autoDeposited: true,
+        pedestalIndex: targetIdx,
+        creature: {
+          id: creature.id,
+          name: creature.name,
+          rankKey: creature.rankKey,
+          rate: creature.rate,
+          mutation: creature.mutation,
+          trait: creature.trait
+        }
+      });
+      return;
+    }
+
+    serverState.spawnDrops.delete(spawnId);
     const carry = {
       id: `car-${spawnId}`,
       serverId,
@@ -3623,6 +3786,10 @@ app.post("/api/admin/spawn", async (req, res) => {
     const scope = scopeRaw === "global" ? "global" : "server";
     const amountRaw = Number(req.body?.amount);
     const amount = Number.isFinite(amountRaw) ? Math.max(1, Math.min(100, Math.floor(amountRaw))) : 1;
+    const targetServerCountRaw = Number(req.body?.targetServerCount);
+    const targetServerCount = Number.isFinite(targetServerCountRaw)
+      ? Math.max(1, Math.min(250, Math.floor(targetServerCountRaw)))
+      : 0;
     const blockKeyRaw = String(req.body?.blockKey || req.body?.rankKey || req.body?.blockType || "").trim();
     const blockKey = normalizeRankKey(blockKeyRaw);
     const mutation = normalizeMutation(req.body?.mutation || "normal");
@@ -3636,9 +3803,12 @@ app.post("/api/admin/spawn", async (req, res) => {
       return;
     }
 
-    const targets = scope === "global"
+    const allTargets = scope === "global"
       ? [...serverStates.values()]
       : [ensureServerState(serverId, {})];
+    const targets = scope === "global" && targetServerCount > 0
+      ? allTargets.slice(0, targetServerCount)
+      : allTargets;
 
     if (isLuckyBlockSpawn) {
       let spawned = 0;
@@ -3667,7 +3837,7 @@ app.post("/api/admin/spawn", async (req, res) => {
     let spawned = 0;
     for (const state of targets) {
       for (let i = 0; i < amount; i += 1) {
-        const created = addSpawnDrop(state, catalog, "normal");
+        const created = addSpawnDrop(state, catalog, mutation, trait);
         if (created) spawned += 1;
       }
       broadcastWorld(state);
@@ -3682,12 +3852,69 @@ app.post("/api/admin/spawn", async (req, res) => {
         rankKey: catalog.rankKey,
         rate: Math.max(1, Number(catalog.rate || 1))
       },
+      mutation,
+      trait,
       amount,
       spawned,
       affectedServers: targets.length
     });
   } catch (err) {
     console.error("/api/admin/spawn failed", err);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+app.post("/api/admin/treadmill", async (req, res) => {
+  try {
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    const uid = decoded.uid;
+    const caller = ensurePlayerDataShape(await getPlayerDoc(uid, decoded), 0);
+    if (!isAdminProfile(caller.profile || {})) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    const serverId = cleanServerId(req.body?.serverId || DEFAULT_SERVER_ID);
+    const scopeRaw = String(req.body?.scope || "server").trim().toLowerCase();
+    const scope = scopeRaw === "global" ? "global" : "server";
+    const amountRaw = Number(req.body?.amount);
+    const amount = Number.isFinite(amountRaw) ? Math.max(1, Math.min(200, Math.floor(amountRaw))) : 10;
+    const targetServerCountRaw = Number(req.body?.targetServerCount);
+    const targetServerCount = Number.isFinite(targetServerCountRaw)
+      ? Math.max(1, Math.min(250, Math.floor(targetServerCountRaw)))
+      : 0;
+    const mutation = normalizeMutation(req.body?.mutation || "normal");
+    const trait = normalizeTrait(req.body?.trait || "none");
+
+    const allTargets = scope === "global"
+      ? [...serverStates.values()]
+      : [ensureServerState(serverId, {})];
+    const targets = scope === "global" && targetServerCount > 0
+      ? allTargets.slice(0, targetServerCount)
+      : allTargets;
+
+    let spawned = 0;
+    for (const state of targets) {
+      for (let i = 0; i < amount; i += 1) {
+        const picked = rollCatalogCreature();
+        const created = addTreadmillDrop(state, picked, mutation, trait);
+        if (created) spawned += 1;
+      }
+      broadcastWorld(state);
+    }
+
+    res.json({
+      ok: true,
+      scope,
+      amount,
+      spawned,
+      mutation,
+      trait,
+      targetServerCount: targetServerCount > 0 ? targetServerCount : null,
+      affectedServers: targets.length
+    });
+  } catch (err) {
+    console.error("/api/admin/treadmill failed", err);
     res.status(500).json({ error: "internal error" });
   }
 });
@@ -4058,8 +4285,11 @@ setInterval(() => {
 
 setInterval(() => {
   const nowSec = Date.now() / 1000;
+  const nowMs = Date.now();
   for (const state of serverStates.values()) {
-    const changed = normalizeServerLuckWindow(state, nowSec) || pruneBaseLocks(state, nowSec);
+    const changed = normalizeServerLuckWindow(state, nowSec)
+      || pruneBaseLocks(state, nowSec)
+      || pruneSpawnDrops(state, nowMs);
     if (changed) broadcastWorld(state);
   }
 }, 1000);

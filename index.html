@@ -1850,7 +1850,7 @@
     <div style="margin-bottom:12px">
       <h4 style="margin:0 0 4px;color:#ff9f57">Console</h4>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <input id="adminConsoleInput" type="text" placeholder="Type command (luck, give, spawn, spawnblock, reset, tutorial, event, broadcast...)" style="flex:1;padding:6px" />
+        <input id="adminConsoleInput" type="text" placeholder="Type command (luck, give, spawn, spawnblock, treadmill, reset, tutorial, event, broadcast...)" style="flex:1;padding:6px" />
         <button id="adminConsoleRun" class="btn" style="background:rgba(255,159,87,0.9);border-color:rgba(255,159,87,0.6)">Run</button>
       </div>
     </div>
@@ -2166,6 +2166,7 @@
       cooldownSec: 20,
       desc: "Freezes a target player for 10s."
     });
+    const FUSE_COOLDOWN_SEC = 60 * 60;
     const TUTORIAL_LAST_STEP = 8;
 
     const canvas = document.getElementById("game");
@@ -2698,6 +2699,7 @@
       tutorialStep: 0,
       tutorialTriedThirdPerson: false,
       tutorialTriedFirstPerson: false,
+      fuseReadyAt: 0,
       quests: [
         { id: "q1", text: "Harvest 5 crops", target: 5, type: "harvest", reward: 550, done: false },
         { id: "q2", text: "Collect 8 creatures", target: 8, type: "creatures", reward: 2500, done: false },
@@ -2738,6 +2740,8 @@
     const worldSpawnMeshes = [];
     const worldSpawnFxMeshes = [];
     const worldSpawnInteractables = [];
+    const treadmillSceneMeshes = [];
+    const treadmillClaimFx = [];
     let remoteSlotSignature = "";
     let remoteDetailSignature = "";
     let worldSpawnSignature = "";
@@ -5038,39 +5042,62 @@
         }
         if (head === "spawn") {
           if (parts.length < 3) {
-            state.info = "Usage: spawn <creature> server|global [amount]";
+            state.info = "Usage: spawn <creature> server|global [mutation] [amount] [serverCount]";
             return;
           }
-          const lastPart = String(parts[parts.length - 1] || "").toLowerCase();
-          const secondLastPart = String(parts[parts.length - 2] || "").toLowerCase();
+          let scopeIndex = -1;
+          for (let i = 1; i < parts.length; i += 1) {
+            const token = String(parts[i] || "").toLowerCase();
+            if (token === "server" || token === "global") {
+              scopeIndex = i;
+              break;
+            }
+          }
+          if (scopeIndex < 2) {
+            state.info = "Usage: spawn <creature> server|global [mutation] [amount] [serverCount]";
+            return;
+          }
+          const creatureName = parts.slice(1, scopeIndex).join(" ").trim();
+          const scope = String(parts[scopeIndex] || "server").toLowerCase() === "global" ? "global" : "server";
+          const tail = parts.slice(scopeIndex + 1).map((t) => String(t || "").trim().toLowerCase()).filter(Boolean);
+          let mutation = "normal";
+          const numeric = [];
+          for (const t of tail) {
+            if (Number.isFinite(Number(t))) numeric.push(Math.floor(Number(t)));
+            else mutation = normalizeMutation(t || mutation);
+          }
           let amount = 1;
-          let scope = "server";
-          const creatureName = parts.slice(1, parts.length - 2).join(" ").trim();
-          if (secondLastPart === "server" || secondLastPart === "global") {
-            scope = secondLastPart;
-            amount = Math.max(1, Math.floor(Number(lastPart) || 1));
-          } else if (lastPart === "server" || lastPart === "global") {
-            scope = lastPart;
-            amount = 1;
-          } else {
-            amount = Math.max(1, Math.floor(Number(lastPart) || 1));
+          let targetServerCount = 0;
+          if (scope === "global") {
+            if (numeric.length >= 2) {
+              amount = Math.max(1, numeric[0]);
+              targetServerCount = Math.max(1, numeric[1]);
+            } else if (numeric.length === 1) {
+              targetServerCount = Math.max(1, numeric[0]);
+            }
+          } else if (numeric.length >= 1) {
+            amount = Math.max(1, numeric[0]);
           }
-          
           if (!creatureName || !Number.isFinite(amount) || amount < 1) {
-            state.info = "Usage: spawn <creature> server|global [amount]";
+            state.info = "Usage: spawn <creature> server|global [mutation] [amount] [serverCount]";
             return;
           }
-          
           const data = await apiJson("/api/admin/spawn", "POST", {
             serverId: multiplayer.serverId,
             creatureName,
             scope,
-            amount: Math.floor(amount)
+            mutation,
+            amount: Math.floor(amount),
+            targetServerCount: scope === "global" && targetServerCount > 0 ? targetServerCount : undefined
           }, token);
-          
+
           const creatureLabel = String(data?.creature?.name || creatureName);
-          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope}).`;
-          state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel} (${scope})`;
+          const mutText = mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`;
+          const scopeText = scope === "global"
+            ? `global (${formatNumber(Number(data?.affectedServers || 0))} server(s))`
+            : "server";
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel}${mutText} (${scopeText}).`;
+          state.info = `Admin command: spawned ${formatNumber(Number(data?.spawned || 0))} ${creatureLabel}${mutText} (${scopeText})`;
           return;
         }
         if (head === "spawnblock" || head === "spawnlb") {
@@ -5083,32 +5110,45 @@
           let amount = 1;
           let mutation = "normal";
           let trait = "none";
+          let targetServerCount = 0;
           if (!blockKey) {
-            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait]";
+            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait] [serverCount]";
             return;
           }
-          const parseModToken = (token) => {
+          const parseModToken = (tokenValue) => {
+            const token = String(tokenValue || "").trim().toLowerCase();
+            if (!token) return false;
+            if (Number.isFinite(Number(token))) return false;
             const raw = String(token || "").trim().toLowerCase();
             if (!raw) return;
             const parsedTrait = normalizeTrait(raw);
             if (parsedTrait !== "none") {
               trait = parsedTrait;
-              return;
+              return true;
             }
             mutation = normalizeMutation(raw);
+            return true;
           };
           if (a3 === "server" || a3 === "global") {
             scope = a3;
-            if (Number.isFinite(Number(a4)) && Number(a4) >= 1) {
-              amount = Math.max(1, Math.floor(Number(a4)));
-              parseModToken(a5 || "normal");
-              parseModToken(a6 || "");
-            } else {
-              parseModToken(a4 || "normal");
-              parseModToken(a5 || "");
+            const tail = [a4, a5, a6, String(parts[6] || "").trim().toLowerCase()].filter(Boolean);
+            const numeric = [];
+            for (const tokenValue of tail) {
+              if (parseModToken(tokenValue)) continue;
+              if (Number.isFinite(Number(tokenValue))) numeric.push(Math.floor(Number(tokenValue)));
+            }
+            if (scope === "global") {
+              if (numeric.length >= 2) {
+                amount = Math.max(1, numeric[0]);
+                targetServerCount = Math.max(1, numeric[1]);
+              } else if (numeric.length === 1) {
+                targetServerCount = Math.max(1, numeric[0]);
+              }
+            } else if (numeric.length >= 1) {
+              amount = Math.max(1, numeric[0]);
             }
           } else {
-            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait]";
+            state.info = "Usage: spawnblock <rarity|valentinesblock|leprechaunblock|adminblock> server|global [amount] [mutation] [trait] [serverCount]";
             return;
           }
           const data = await apiJson("/api/admin/spawn", "POST", {
@@ -5117,12 +5157,46 @@
             amount,
             blockKey,
             mutation,
-            trait
+            trait,
+            targetServerCount: scope === "global" && targetServerCount > 0 ? targetServerCount : undefined
           }, token);
           const spawnedBlockMeta = blockMetaByKey(data?.blockKey || blockKey);
           const spawnedMutation = normalizeMutation(data?.mutation || mutation);
           const spawnedTrait = normalizeTrait(data?.trait || trait);
-          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`}${spawnedTrait === "leprechaun" ? " [Leprechaun]" : ""} block drop(s) on spawn pad (${scope}).`;
+          const scopeText = scope === "global"
+            ? `global (${formatNumber(Number(data?.affectedServers || 0))} server(s))`
+            : "server";
+          state.info = `Spawned ${formatNumber(Number(data?.spawned || 0))} ${spawnedBlockMeta.label}${spawnedMutation === "normal" ? "" : ` ${mutationBadge(spawnedMutation)}`}${spawnedTrait === "leprechaun" ? " [Leprechaun]" : ""} block drop(s) on spawn pad (${scopeText}).`;
+          return;
+        }
+        if (head === "treadmill") {
+          const scope = String(parts[1] || "server").trim().toLowerCase() === "global" ? "global" : "server";
+          const mutation = normalizeMutation(String(parts[2] || "normal").trim().toLowerCase());
+          const firstNum = Number(parts[3]);
+          const secondNum = Number(parts[4]);
+          let amount = 12;
+          let targetServerCount = 0;
+          if (scope === "global") {
+            if (Number.isFinite(firstNum) && firstNum >= 1 && Number.isFinite(secondNum) && secondNum >= 1) {
+              amount = Math.max(1, Math.floor(firstNum));
+              targetServerCount = Math.max(1, Math.floor(secondNum));
+            } else if (Number.isFinite(firstNum) && firstNum >= 1) {
+              targetServerCount = Math.max(1, Math.floor(firstNum));
+            }
+          } else if (Number.isFinite(firstNum) && firstNum >= 1) {
+            amount = Math.max(1, Math.floor(firstNum));
+          }
+          const data = await apiJson("/api/admin/treadmill", "POST", {
+            serverId: multiplayer.serverId,
+            scope,
+            mutation,
+            amount,
+            targetServerCount: scope === "global" && targetServerCount > 0 ? targetServerCount : undefined
+          }, token);
+          const scopeText = scope === "global"
+            ? `global (${formatNumber(Number(data?.affectedServers || 0))} server(s))`
+            : "server";
+          state.info = `Treadmill spawned ${formatNumber(Number(data?.spawned || 0))} moving creatures (${scopeText}).`;
           return;
         }
         if (head === "reset") {
@@ -5159,7 +5233,7 @@
           showBroadcast(`[ADMIN] ${text}`, 12);
           return;
         }
-        state.info = "Unknown command. Use: luck, event, give, spawn, spawnblock, reset, tutorial, or broadcast";
+        state.info = "Unknown command. Use: luck, event, give, spawn, spawnblock, treadmill, reset, tutorial, or broadcast";
       } catch {
         state.info = "Command failed.";
       }
@@ -5342,6 +5416,7 @@
           tutorialStep: Math.max(0, Math.floor(Number(state.tutorialStep || 0))),
           tutorialTriedThirdPerson: !!state.tutorialTriedThirdPerson,
           tutorialTriedFirstPerson: !!state.tutorialTriedFirstPerson,
+          fuseReadyAt: Math.max(0, Number(state.fuseReadyAt || 0)),
           quests: state.quests.map((q) => ({ id: q.id, done: q.done })),
           info: state.info
         },
@@ -5431,6 +5506,7 @@
         "money", "stardust", "seeds", "harvested", "totalCreatures", "dailyStreak",
         "rebirths", "baseFloors",
         "lastSpinWindow",
+        "fuseReadyAt",
         "seedTier", "fertilizerTier", "hatchLuckTier", "plotExpansionTier",
         "creatureCapTier", "maxCreatures", "seedYieldBonus", "farmPayoutBonus"
       ];
@@ -5694,6 +5770,11 @@
       if (!id) return null;
       const itemType = String(raw.itemType || "creature").trim().toLowerCase() === "block" ? "block" : "creature";
       const rankKey = normalizeBlockKey(raw.rankKey || raw.blockKey || "basic");
+      const source = String(raw.source || "spawn").trim().toLowerCase() === "treadmill" ? "treadmill" : "spawn";
+      const motionVx = Number(raw.motionVx || 0);
+      const motionVz = Number(raw.motionVz || 0);
+      const spawnedAt = Number(raw.spawnedAt || Date.now());
+      const despawnAt = Number(raw.despawnAt || 0);
       return {
         id,
         itemType,
@@ -5704,7 +5785,12 @@
         mutation: normalizeMutation(raw.mutation || "normal"),
         trait: normalizeTrait(raw.trait || "none"),
         x: Number(raw.x || 0),
-        z: Number(raw.z || 0)
+        z: Number(raw.z || 0),
+        source,
+        motionVx: Number.isFinite(motionVx) ? motionVx : 0,
+        motionVz: Number.isFinite(motionVz) ? motionVz : 0,
+        spawnedAt: Number.isFinite(spawnedAt) ? spawnedAt : Date.now(),
+        despawnAt: Number.isFinite(despawnAt) ? despawnAt : 0
       };
     }
 
@@ -5719,6 +5805,45 @@
       for (let i = interactables.length - 1; i >= 0; i -= 1) {
         if (interactables[i]?.dead) interactables.splice(i, 1);
       }
+    }
+
+    function clearTreadmillVisual() {
+      for (const mesh of treadmillSceneMeshes) scene.remove(mesh);
+      treadmillSceneMeshes.length = 0;
+    }
+
+    function ensureTreadmillVisual(active = false) {
+      if (!active) {
+        clearTreadmillVisual();
+        return;
+      }
+      if (treadmillSceneMeshes.length > 0) return;
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, 0.2, 13.2),
+        new THREE.MeshStandardMaterial({ color: 0x2a2f33, roughness: 0.65, metalness: 0.25 })
+      );
+      base.position.set(15.8, 0.12, 0);
+      base.receiveShadow = true;
+      base.castShadow = true;
+      scene.add(base);
+      treadmillSceneMeshes.push(base);
+      const lane = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.05, 12.6),
+        new THREE.MeshStandardMaterial({ color: 0x1d5d2a, roughness: 0.35, metalness: 0.4, emissive: 0x0f2a14, emissiveIntensity: 0.25 })
+      );
+      lane.position.set(15.8, 0.25, 0);
+      scene.add(lane);
+      treadmillSceneMeshes.push(lane);
+    }
+
+    function worldDropLivePosition(drop, nowMs = Date.now()) {
+      const d = normalizeWorldSpawnDrop(drop);
+      if (!d) return { x: 0, z: 0 };
+      const dt = Math.max(0, (nowMs - Number(d.spawnedAt || nowMs)) / 1000);
+      return {
+        x: Number(d.x || 0) + Number(d.motionVx || 0) * dt,
+        z: Number(d.z || 0) + Number(d.motionVz || 0) * dt
+      };
     }
 
     async function grabWorldSpawnDrop(dropObj) {
@@ -5741,13 +5866,37 @@
           serverId: multiplayer.serverId,
           spawnId: drop.id
         });
+        if (drop.source === "treadmill" && result?.autoDeposited) {
+          const pedIdx = Math.max(0, Math.floor(Number(result?.pedestalIndex || 0)));
+          const ped = pedestals[pedIdx] || null;
+          const targetPos = ped?.position || new THREE.Vector3(player.pos.x, 0, player.pos.z);
+          const fxMesh = createCreatureMesh(drop.rankKey, drop.name);
+          const startPos = worldDropLivePosition(drop, Date.now());
+          fxMesh.position.set(startPos.x, 1.2, startPos.z);
+          scene.add(fxMesh);
+          treadmillClaimFx.push({
+            mesh: fxMesh,
+            fromX: startPos.x,
+            fromY: 1.2,
+            fromZ: startPos.z,
+            toX: Number(targetPos.x || 0),
+            toY: 1.4,
+            toZ: Number(targetPos.z || 0),
+            startAt: performance.now() / 1000,
+            duration: 1.05
+          });
+        }
         if (String(result?.itemType || "") === "block" || drop.itemType === "block") {
           const meta = blockMetaByKey(result?.blockKey || drop.blockKey || drop.rankKey || "basic");
           const mutation = normalizeMutation(result?.mutation || drop.mutation || "normal");
           const trait = normalizeTrait(result?.trait || drop.trait || "none");
           state.info = `Grabbed ${meta.label}${mutation === "normal" ? "" : ` ${mutationBadge(mutation)}`}${trait === "leprechaun" ? " [Leprechaun]" : ""} Lucky Block.`;
         } else {
-          state.info = `Grabbed ${drop.name}. Carry it to your barn and press E on an empty pedestal.`;
+          if (drop.source === "treadmill" && result?.autoDeposited) {
+            state.info = `${drop.name} claimed. It floated to your base pedestal.`;
+          } else {
+            state.info = `Grabbed ${drop.name}. Carry it to your barn and press E on an empty pedestal.`;
+          }
         }
         updateUI();
         return true;
@@ -5762,11 +5911,13 @@
 
     function renderWorldSpawnDrops(force = false) {
       const drops = Array.isArray(multiplayer.spawnDrops) ? multiplayer.spawnDrops : [];
+      const hasTreadmill = drops.some((d) => normalizeWorldSpawnDrop(d)?.source === "treadmill");
+      ensureTreadmillVisual(hasTreadmill);
       const signature = drops
         .map((d) => {
           const drop = normalizeWorldSpawnDrop(d);
           if (!drop) return "";
-          return `${drop.id}:${drop.itemType}:${drop.rankKey}:${drop.mutation}:${drop.trait}:${drop.x.toFixed(2)}:${drop.z.toFixed(2)}`;
+          return `${drop.id}:${drop.itemType}:${drop.rankKey}:${drop.mutation}:${drop.trait}:${drop.source}:${drop.x.toFixed(2)}:${drop.z.toFixed(2)}:${drop.spawnedAt}:${drop.motionVx.toFixed(2)}:${drop.motionVz.toFixed(2)}:${drop.despawnAt}`;
         })
         .filter(Boolean)
         .join("|");
@@ -5778,6 +5929,7 @@
         const drop = normalizeWorldSpawnDrop(raw);
         if (!drop) continue;
         const rankMeta = getRankByKey(drop.rankKey);
+        const livePos = worldDropLivePosition(drop, Date.now());
         let mesh = null;
         if (drop.itemType === "block") {
           const mat = blockMaterialForRank(drop.rankKey);
@@ -5791,23 +5943,29 @@
               emissiveIntensity: mat.emissiveIntensity
             })
           );
-          mesh.position.set(drop.x, 1.0, drop.z);
+          mesh.position.set(livePos.x, 1.0, livePos.z);
           const meta = blockMetaByKey(drop.blockKey || drop.rankKey);
           const line3 = `${drop.mutation === "normal" ? "" : mutationBadge(drop.mutation)}${drop.trait === "leprechaun" ? `${drop.mutation === "normal" ? "" : " • "}Leprechaun` : ""}`;
           setMeshLabel(mesh, `${drop.trait === "leprechaun" ? "[Leprechaun] " : ""}${meta.label}`, "Lucky Block", line3, mutationTint(drop.mutation));
         } else {
           mesh = createCreatureMesh(rankMeta.key, drop.name);
-          mesh.position.set(drop.x, 1.15, drop.z);
+          mesh.position.set(livePos.x, 1.15, livePos.z);
           setMeshLabel(mesh, rankMeta.label, drop.name, `${formatMoney(drop.rate)}/s`, mutationTint(drop.mutation));
         }
         applyMutationFx(mesh, drop.mutation, false);
         scene.add(mesh);
         worldSpawnMeshes.push(mesh);
-        worldSpawnFxMeshes.push({ mesh, baseY: drop.itemType === "block" ? 1.0 : 1.15, phase: Math.random() * Math.PI * 2 });
+        worldSpawnFxMeshes.push({
+          mesh,
+          drop,
+          baseY: drop.itemType === "block" ? 1.0 : 1.15,
+          phase: Math.random() * Math.PI * 2,
+          interactable: null
+        });
 
         const it = {
           name: `Spawn ${drop.id}`,
-          position: new THREE.Vector3(drop.x, 0, drop.z),
+          position: new THREE.Vector3(livePos.x, 0, livePos.z),
           radius: 2.15,
           priority: 9,
           get prompt() {
@@ -5815,6 +5973,7 @@
               const meta = blockMetaByKey(drop.blockKey || drop.rankKey);
               return `[E] Grab ${meta.label}${drop.mutation === "normal" ? "" : ` ${mutationBadge(drop.mutation)}`}${drop.trait === "leprechaun" ? " [Leprechaun]" : ""} Block`;
             }
+            if (drop.source === "treadmill") return `[E] Claim ${drop.name} (${rankMeta.label})`;
             return `[E] Grab ${drop.name} (${rankMeta.label})`;
           },
           interact(code) {
@@ -5822,6 +5981,7 @@
             void grabWorldSpawnDrop(drop);
           }
         };
+        worldSpawnFxMeshes[worldSpawnFxMeshes.length - 1].interactable = it;
         worldSpawnInteractables.push(it);
         interactables.push(it);
       }
@@ -5917,8 +6077,40 @@
       }
       for (const s of worldSpawnFxMeshes) {
         if (!s || !s.mesh) continue;
+        const drop = normalizeWorldSpawnDrop(s.drop || null);
+        if (drop) {
+          const nowMs = Date.now();
+          if (Number(drop.despawnAt || 0) > 0 && Number(drop.despawnAt || 0) <= nowMs) {
+            s.mesh.visible = false;
+            if (s.interactable) s.interactable.dead = true;
+            continue;
+          }
+          const livePos = worldDropLivePosition(drop, nowMs);
+          s.mesh.position.x = livePos.x;
+          s.mesh.position.z = livePos.z;
+          if (s.interactable?.position) {
+            s.interactable.position.set(livePos.x, 0, livePos.z);
+          }
+        }
         s.mesh.rotation.y += 0.015;
         s.mesh.position.y = s.baseY + Math.sin(now * 2.1 + s.phase) * 0.1;
+      }
+      for (let i = treadmillClaimFx.length - 1; i >= 0; i -= 1) {
+        const fx = treadmillClaimFx[i];
+        if (!fx || !fx.mesh) {
+          treadmillClaimFx.splice(i, 1);
+          continue;
+        }
+        const t = Math.max(0, Math.min(1, ((performance.now() / 1000) - Number(fx.startAt || 0)) / Math.max(0.001, Number(fx.duration || 1))));
+        const ease = 1 - Math.pow(1 - t, 3);
+        fx.mesh.position.x = lerp(Number(fx.fromX || 0), Number(fx.toX || 0), ease);
+        fx.mesh.position.y = lerp(Number(fx.fromY || 1.2), Number(fx.toY || 1.4), ease);
+        fx.mesh.position.z = lerp(Number(fx.fromZ || 0), Number(fx.toZ || 0), ease);
+        fx.mesh.rotation.y += 0.08;
+        if (t >= 1) {
+          scene.remove(fx.mesh);
+          treadmillClaimFx.splice(i, 1);
+        }
       }
     }
 
@@ -9341,8 +9533,11 @@
         return `<div style="display:flex;justify-content:space-between;gap:8px"><span class="${rank.color}">${o.name}${badge}</span><span>${formatNumber(pct)}%</span></div>`;
       }).join("");
       const topChance = Number(chances[chances.length - 1] || 0);
-      fuseOddsEl.innerHTML = `<div style="margin-bottom:6px">Fuse quality: <b>${formatNumber(strength)}</b> | Leprechaun result: <b>${formatNumber(topChance)}%</b></div>${rows}`;
-      fuseDoEl.disabled = unique.length !== 4;
+      const nowSec = realNowSec();
+      const cdLeft = Math.max(0, Math.ceil(Number(state.fuseReadyAt || 0) - nowSec));
+      fuseOddsEl.innerHTML = `<div style="margin-bottom:6px">Fuse quality: <b>${formatNumber(strength)}</b> | Leprechaun result: <b>${formatNumber(topChance)}%</b></div><div style="margin-bottom:6px;color:${cdLeft > 0 ? "#ffd7a5" : "#b9ffd3"}">Fuse cooldown: <b>${cdLeft > 0 ? formatDuration(cdLeft) : "Ready"}</b></div>${rows}`;
+      fuseDoEl.disabled = unique.length !== 4 || cdLeft > 0;
+      fuseDoEl.textContent = cdLeft > 0 ? `Fuse ready in ${formatDuration(cdLeft)}` : "Fuse 4";
     }
 
     function toggleFusePanel(force = null) {
@@ -9364,6 +9559,14 @@
     }
 
     function runLeprechaunFuse() {
+      const nowSec = realNowSec();
+      const cdLeft = Math.max(0, Math.ceil(Number(state.fuseReadyAt || 0) - nowSec));
+      if (cdLeft > 0) {
+        state.info = `Fuse is on cooldown for ${formatDuration(cdLeft)}.`;
+        renderFusePanel();
+        updateUI();
+        return;
+      }
       const selects = [fusePick1El, fusePick2El, fusePick3El, fusePick4El];
       const pickedIds = selects.map((s) => String(s?.value || "").trim()).filter(Boolean);
       const uniqueIds = [...new Set(pickedIds)];
@@ -9396,6 +9599,7 @@
       });
       if (created) {
         state.info = `Fuse success: ${finalTrait === "leprechaun" ? "[Leprechaun] " : ""}${created.name} (${rank.label}) created.`;
+        state.fuseReadyAt = realNowSec() + FUSE_COOLDOWN_SEC;
       } else {
         state.info = "Fuse failed. Try again.";
       }
@@ -9673,7 +9877,7 @@
         
         if (multiplayer.isAdmin) {
           const head = String(text.split(/\s+/)[0] || "").toLowerCase();
-          if (["luck", "event", "give", "spawn", "spawnblock", "spawnlb", "reset", "tutorial", "broadcast"].includes(head)) {
+          if (["luck", "event", "give", "spawn", "spawnblock", "spawnlb", "treadmill", "reset", "tutorial", "broadcast"].includes(head)) {
             void runAdminCommand(text);
             chatInputEl.value = "";
             return;
