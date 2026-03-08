@@ -79,6 +79,8 @@ const SPAWN_DROP_CENTER = Object.freeze({ x: -10.5, z: 6.1 });
 const TREADMILL_SPAWN_START = Object.freeze({ x: 15.8, z: -6.4 });
 const TREADMILL_SPAWN_END = Object.freeze({ x: 15.8, z: 6.4 });
 const TREADMILL_DROP_SPEED = 1.8;
+const TREADMILL_MIN_INTERVAL_MS = 900;
+const TREADMILL_MAX_INTERVAL_MS = 1600;
 const SPAWN_CREATURE_CATALOG = Object.freeze([
   { name: "Fat Cat", rankKey: "basic", rate: 2.30 },
   { name: "Tiny Bunny", rankKey: "basic", rate: 3.20 },
@@ -1481,6 +1483,76 @@ function addTreadmillDrop(serverState, creatureSpec, mutation = "normal", trait 
   return normalizeSpawnDrop(drop);
 }
 
+function nextTreadmillSpawnDelayMs() {
+  return Math.floor(randomRange(TREADMILL_MIN_INTERVAL_MS, TREADMILL_MAX_INTERVAL_MS));
+}
+
+function queueTreadmillSpawns(serverState, amount, mutation = "normal", trait = "none") {
+  if (!serverState) return 0;
+  const add = Math.max(1, Math.min(2000, Math.floor(Number(amount) || 0)));
+  const nowMs = Date.now();
+  const mutationSafe = normalizeMutation(mutation || "normal");
+  const traitSafe = normalizeTrait(trait || "none");
+  const existing = serverState.treadmillSpawner && typeof serverState.treadmillSpawner === "object"
+    ? serverState.treadmillSpawner
+    : null;
+  if (existing) {
+    existing.remaining = Math.max(0, Math.floor(Number(existing.remaining || 0))) + add;
+    existing.mutation = mutationSafe;
+    existing.trait = traitSafe;
+    if (!Number.isFinite(Number(existing.nextSpawnAt || 0)) || Number(existing.nextSpawnAt || 0) < nowMs) {
+      existing.nextSpawnAt = nowMs + 120;
+    }
+  } else {
+    serverState.treadmillSpawner = {
+      remaining: add,
+      mutation: mutationSafe,
+      trait: traitSafe,
+      nextSpawnAt: nowMs + 120
+    };
+  }
+  const travelMs = Math.ceil((Math.hypot(
+    Number(TREADMILL_SPAWN_END.x - TREADMILL_SPAWN_START.x),
+    Number(TREADMILL_SPAWN_END.z - TREADMILL_SPAWN_START.z)
+  ) / Math.max(0.01, TREADMILL_DROP_SPEED)) * 1000);
+  const avgInterval = Math.floor((TREADMILL_MIN_INTERVAL_MS + TREADMILL_MAX_INTERVAL_MS) / 2);
+  const queued = Math.max(0, Math.floor(Number(serverState.treadmillSpawner.remaining || 0)));
+  serverState.treadmillEventUntil = Math.max(
+    Number(serverState.treadmillEventUntil || 0),
+    Math.ceil((nowMs + queued * avgInterval + travelMs + 3000) / 1000)
+  );
+  return add;
+}
+
+function processServerTreadmill(serverState, nowMs = Date.now()) {
+  if (!serverState) return false;
+  let changed = false;
+  const spawner = serverState.treadmillSpawner && typeof serverState.treadmillSpawner === "object"
+    ? serverState.treadmillSpawner
+    : null;
+  if (spawner && Number(spawner.remaining || 0) > 0 && Number(spawner.nextSpawnAt || 0) <= nowMs) {
+    const picked = rollCatalogCreature();
+    const created = addTreadmillDrop(
+      serverState,
+      picked,
+      normalizeMutation(spawner.mutation || "normal"),
+      normalizeTrait(spawner.trait || "none")
+    );
+    if (created) changed = true;
+    spawner.remaining = Math.max(0, Math.floor(Number(spawner.remaining || 0)) - 1);
+    if (spawner.remaining > 0) {
+      spawner.nextSpawnAt = nowMs + nextTreadmillSpawnDelayMs();
+    } else {
+      serverState.treadmillSpawner = null;
+    }
+  }
+  if (Number(serverState.treadmillEventUntil || 0) > 0 && nowMs / 1000 >= Number(serverState.treadmillEventUntil || 0) && !serverState.treadmillSpawner) {
+    serverState.treadmillEventUntil = 0;
+    changed = true;
+  }
+  return changed;
+}
+
 function pruneSpawnDrops(serverState, nowMs = Date.now()) {
   if (!serverState || !(serverState.spawnDrops instanceof Map)) return false;
   let changed = false;
@@ -1594,6 +1666,7 @@ function worldPayload(serverState) {
     serverLuckUntil: Number(serverState.serverLuckUntil || 0),
     forcedBlueMoonUntil: Number(serverState.forcedBlueMoonUntil || 0),
     forcedBlueMoonEventId: String(serverState.forcedBlueMoonEventId || ""),
+    treadmillEventUntil: Number(serverState.treadmillEventUntil || 0),
     spawnDrops: listSpawnDrops(serverState),
     lockedBases: listActiveBaseLocks(serverState),
     occupiedSlots: [...serverState.activeSlots.values()].sort((a, b) => a - b),
