@@ -1976,6 +1976,20 @@
       <button class="btn" onclick="toggleAdminPanel(false)">Close</button>
     </div>
   </div>
+  <div id="redeemPanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:89;min-width:400px;max-width:min(94vw,500px);padding:14px;">
+    <h3 style="margin:0 0 6px">Redeem Code</h3>
+    <div style="margin-bottom:12px">
+      <p style="color:#d9ecff;margin:0 0 8px">Enter a redeem code to claim rewards:</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="redeemCodeInput" type="text" placeholder="Enter code..." style="flex:1;padding:6px" maxlength="50">
+        <button id="redeemSubmitBtn" class="btn" style="background:rgba(86, 166, 255, 0.92);border-color:rgba(165, 222, 255, 0.7)">Redeem</button>
+      </div>
+      <div id="redeemMessage" style="font-size:12px;color:#ffecc3;min-height:16px"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="toggleRedeemPanel(false)">Close</button>
+    </div>
+  </div>
   <div id="sellCreatureModal" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:85;min-width:340px;padding:14px;">
     <h3 style="margin:0 0 6px">Sell Creature</h3>
     <div id="sellCreatureText" style="font-size:13px;color:#d9ecff;margin-bottom:10px"></div>
@@ -2069,7 +2083,8 @@
       { key: "valentinesblock", label: "Valentine's Day", baseRankKey: "legendary", color: "c-epic" },
       { key: "leprechaunblock", label: "Leprechaun", baseRankKey: "secret", color: "c-godly" },
       { key: "adminblock", label: "Admin", baseRankKey: "transcendent", color: "c-admin" },
-      { key: "godlyblock", label: "Godly", baseRankKey: "omniversal", color: "c-godly" }
+      { key: "godlyblock", label: "Godly", baseRankKey: "omniversal", color: "c-godly" },
+      { key: "secretblock", label: "Secret", baseRankKey: "transcendent", color: "c-admin" }
     ];
     const MUTATION_KEYS = ["normal", "bluemoon", "soulbound"];
     const TRAIT_KEYS = ["none", "leprechaun"];
@@ -2324,6 +2339,10 @@
     const adminTutorialUserEl = document.getElementById("adminTutorialUser");
     const adminBroadcastRunEl = document.getElementById("adminBroadcastRun");
     const adminBroadcastTextEl = document.getElementById("adminBroadcastText");
+    const redeemPanelEl = document.getElementById("redeemPanel");
+    const redeemCodeInputEl = document.getElementById("redeemCodeInput");
+    const redeemSubmitBtnEl = document.getElementById("redeemSubmitBtn");
+    const redeemMessageEl = document.getElementById("redeemMessage");
 
     const SAVE_VERSION = 1;
     const FIELD_SPACING = 26;
@@ -4882,6 +4901,60 @@
         multiplayer.chatMessages = [];
       }
       renderChat();
+    }
+
+    function processRedeemCode(code) {
+      const normalizedCode = code.trim().toLowerCase();
+      redeemMessageEl.textContent = "";
+      
+      if (normalizedCode === "secret") {
+        // Give secret lucky block
+        try {
+          // Add secret block to inventory
+          const secretKey = "secretblock";
+          if (!state.inventory[secretKey]) {
+            state.inventory[secretKey] = { normal: 0, moon: 0, soulbound: 0 };
+          }
+          state.inventory[secretKey].normal = (state.inventory[secretKey].normal || 0) + 1;
+          
+          redeemMessageEl.textContent = "✅ Success! You received a Secret Lucky Block!";
+          redeemMessageEl.style.color = "#90EE90";
+          
+          // Close panel after successful redeem
+          setTimeout(() => {
+            toggleRedeemPanel(false);
+            state.info = "Redeemed code: secret - Received Secret Lucky Block!";
+            updateUI();
+          }, 1500);
+          
+        } catch (err) {
+          redeemMessageEl.textContent = "❌ Error processing code. Please try again.";
+          redeemMessageEl.style.color = "#ff6b6b";
+        }
+      } else {
+        redeemMessageEl.textContent = "❌ Invalid code. Try again!";
+        redeemMessageEl.style.color = "#ff6b6b";
+      }
+    }
+
+    function toggleRedeemPanel(force = null) {
+      if (!redeemPanelEl) return;
+      const open = force === null ? redeemPanelEl.style.display === "none" : !!force;
+      redeemPanelEl.style.display = open ? "block" : "none";
+      if (open) {
+        redeemCodeInputEl.value = "";
+        redeemMessageEl.textContent = "";
+        redeemCodeInputEl.focus();
+        toggleGuide(false);
+        toggleChat(false);
+        toggleSettingsPanel(false);
+        toggleIndexPanel(false);
+        toggleCosmeticsPanel(false);
+        toggleShop(false);
+        toggleInventory(false);
+        toggleAdminPanel(false);
+        document.exitPointerLock();
+      }
     }
 
     function toggleAdminPanel(force = null) {
@@ -9909,6 +9982,20 @@
         try { localStorage.removeItem(SESSION_HINT_KEY); } catch {}
         location.reload();
       });
+      redeemSubmitBtnEl.addEventListener("click", () => {
+        const code = redeemCodeInputEl.value.trim();
+        if (code) {
+          processRedeemCode(code);
+        }
+      });
+      redeemCodeInputEl.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          const code = redeemCodeInputEl.value.trim();
+          if (code) {
+            processRedeemCode(code);
+          }
+        }
+      });
       chatCloseEl.addEventListener("click", () => toggleChat(false));
       indexCloseEl.addEventListener("click", () => toggleIndexPanel(false));
       cosmeticsCloseEl.addEventListener("click", () => toggleCosmeticsPanel(false));
@@ -9924,6 +10011,13 @@
         e.preventDefault();
         const text = String(chatInputEl.value || "").trim();
         if (!text || !multiplayer.ws || multiplayer.ws.readyState !== WebSocket.OPEN) return;
+        
+        // Check for /redeem command
+        if (text.toLowerCase() === "/redeem") {
+          toggleRedeemPanel(true);
+          chatInputEl.value = "";
+          return;
+        }
         
         if (multiplayer.isAdmin) {
           const head = String(text.split(/\s+/)[0] || "").toLowerCase();
