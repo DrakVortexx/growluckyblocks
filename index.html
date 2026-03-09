@@ -4910,12 +4910,12 @@
       if (normalizedCode === "secret") {
         // Give secret lucky block
         try {
-          // Add secret block to inventory
+          // Add secret block to special inventory
           const secretKey = "secretblock";
-          if (!state.inventory[secretKey]) {
-            state.inventory[secretKey] = { normal: 0, moon: 0, soulbound: 0 };
+          if (!state.specialLuckyInventory[secretKey]) {
+            state.specialLuckyInventory[secretKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
           }
-          state.inventory[secretKey].normal = (state.inventory[secretKey].normal || 0) + 1;
+          state.specialLuckyInventory[secretKey].normal = (state.specialLuckyInventory[secretKey].normal || 0) + 1;
           
           redeemMessageEl.textContent = "✅ Success! You received a Secret Lucky Block!";
           redeemMessageEl.style.color = "#90EE90";
