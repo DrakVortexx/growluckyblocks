@@ -10,6 +10,80 @@ const TRADES_COLLECTION_ID = process.env.FIREBASE_TRADES_COLLECTION_ID || "trade
 const CHAT_COLLECTION_ID = process.env.FIREBASE_CHAT_COLLECTION_ID || "chat";
 const SERVERS_COLLECTION_ID = process.env.FIREBASE_SERVERS_COLLECTION_ID || "servers";
 const PLAYERS_BLOB_FIELD = process.env.FIREBASE_PLAYERS_BLOB_FIELD || "profile";
+
+// Player data caching system to reduce Firebase operations
+const playerDataCache = new Map(); // playerId -> { data, lastSaveTime, dirty }
+const BATCH_SAVE_INTERVAL_MS = 30000; // 30 seconds
+const DIRTY_PLAYERS = new Set(); // Track which players need saving
+
+// Initialize batch save interval
+setInterval(async () => {
+  await batchSaveDirtyPlayers();
+}, BATCH_SAVE_INTERVAL_MS);
+
+async function batchSaveDirtyPlayers() {
+  if (DIRTY_PLAYERS.size === 0) return;
+  
+  const playersToSave = Array.from(DIRTY_PLAYERS);
+  DIRTY_PLAYERS.clear();
+  
+  console.log(`[Batch Save] Saving ${playersToSave.length} players to Firebase`);
+  
+  const savePromises = playersToSave.map(async (playerId) => {
+    const cacheEntry = playerDataCache.get(playerId);
+    if (!cacheEntry || !cacheEntry.dirty) return;
+    
+    try {
+      await setPlayerDocMerge(playerId, cacheEntry.data, null);
+      cacheEntry.dirty = false;
+      cacheEntry.lastSaveTime = Date.now();
+    } catch (err) {
+      console.error(`[Batch Save] Failed to save player ${playerId}:`, err?.message || err);
+      // Re-add to dirty set if failed
+      DIRTY_PLAYERS.add(playerId);
+    }
+  });
+  
+  await Promise.allSettled(savePromises);
+}
+
+function cachePlayerData(playerId, data) {
+  const existing = playerDataCache.get(playerId) || {};
+  playerDataCache.set(playerId, {
+    ...existing,
+    data: { ...existing.data, ...data },
+    dirty: true,
+    lastSaveTime: existing.lastSaveTime || Date.now()
+  });
+  DIRTY_PLAYERS.add(playerId);
+}
+
+function getCachedPlayerData(playerId) {
+  return playerDataCache.get(playerId)?.data;
+}
+
+function markPlayerDirty(playerId) {
+  const cacheEntry = playerDataCache.get(playerId);
+  if (cacheEntry) {
+    cacheEntry.dirty = true;
+    DIRTY_PLAYERS.add(playerId);
+  }
+}
+
+async function savePlayerDataImmediate(playerId) {
+  const cacheEntry = playerDataCache.get(playerId);
+  if (!cacheEntry || !cacheEntry.dirty) return;
+  
+  try {
+    await setPlayerDocMerge(playerId, cacheEntry.data, null);
+    cacheEntry.dirty = false;
+    cacheEntry.lastSaveTime = Date.now();
+    DIRTY_PLAYERS.delete(playerId);
+    console.log(`[Immediate Save] Saved player ${playerId} to Firebase`);
+  } catch (err) {
+    console.error(`[Immediate Save] Failed to save player ${playerId}:`, err?.message || err);
+  }
+}
 const Query = {
   equal: (field, value) => ({ op: "equal", field, value }),
   limit: (n) => ({ op: "limit", value: Number(n) || 0 })
@@ -1076,17 +1150,27 @@ async function datastoreCall(op) {
 
 async function getPlayerDoc(playerId, actor = null) {
   try {
+    // Check new cache first
+    const cachedData = getCachedPlayerData(playerId);
+    if (cachedData) {
+      return cachedData;
+    }
+    
+    // Load from Firebase if not in cache
     const doc = await getDocumentById(PLAYERS_COLLECTION_ID, playerId, actor);
     if (!doc) {
       playerCache.delete(playerId);
       return null;
     }
+    
+    // Process and cache the data
     const data = sanitizeDocData(doc);
     if (typeof data[PLAYERS_BLOB_FIELD] === "string") {
       try {
         const parsed = JSON.parse(data[PLAYERS_BLOB_FIELD]);
         if (parsed && typeof parsed === "object") {
           playerCache.set(playerId, deepClone(parsed));
+          cachePlayerData(playerId, parsed); // Add to new cache
           return parsed;
         }
       } catch {
@@ -1094,6 +1178,7 @@ async function getPlayerDoc(playerId, actor = null) {
       }
     }
     playerCache.set(playerId, deepClone(data));
+    cachePlayerData(playerId, data); // Add to new cache
     return data;
   } catch (err) {
     if (isDatastoreNotFound(err)) {
@@ -1949,7 +2034,8 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
     }
 
     owner.data.pedestals = pedestals;
-    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null, { strict: true });
+    // Cache the data instead of immediate Firebase write
+    cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     serverState.activeSnapshots.set(ownerId, buildWorldSnapshot(owner.data || {}));
     if (restoredPedestalIndex !== sourceIdx) unlockRecentlyStolenPedestal(serverState, ownerId, sourceIdx);
     lockRecentlyStolenPedestal(serverState, ownerId, restoredPedestalIndex, {
@@ -2041,7 +2127,8 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
   }
 
   thiefDoc.data.pedestals = pedestals;
-  await setPlayerDocMerge(thief, { data: thiefDoc.data, updatedAt: Date.now() }, null, { strict: true });
+  // Cache the data instead of immediate Firebase write
+  cachePlayerData(thief, { data: thiefDoc.data, updatedAt: Date.now() });
   serverState.activeSnapshots.set(thief, buildWorldSnapshot(thiefDoc.data || {}));
   serverState.carriedByThief.delete(thief);
 
@@ -2180,7 +2267,8 @@ async function completeSteal(serverState, steal) {
     }
 
     owner.data.pedestals = ownerPedestals;
-    await setPlayerDocMerge(ownerId, { data: owner.data, updatedAt: Date.now() }, null, { strict: true });
+    // Cache the data instead of immediate Firebase write
+    cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     lockRecentlyStolenPedestal(serverState, ownerId, pedIndex, {
       mode: "stolen",
       maxPedestals,
@@ -2515,8 +2603,9 @@ app.post("/api/auth/profile", async (req, res) => {
       profilePatch.usernameLower = usernameKey(currentUsername);
     }
 
-    const merged = await setPlayerDocMerge(uid, { profile: profilePatch, updatedAt: Date.now() }, decoded || null);
-    const profile = merged.profile || profilePatch;
+    // Cache the profile data instead of immediate Firebase write
+    cachePlayerData(uid, { profile: profilePatch, updatedAt: Date.now() });
+    const profile = profilePatch;
 
     for (const state of serverStates.values()) {
       if (state.activeSlots.has(uid)) {
@@ -2579,7 +2668,8 @@ app.post("/api/servers/create", async (req, res) => {
       return;
     }
     profile.data.state.stardust = stardustNow - PRIVATE_SERVER_CREATE_STARDUST_COST;
-    await setPlayerDocMerge(playerId, { data: profile.data, updatedAt: Date.now() }, decoded);
+    // Cache the data instead of immediate Firebase write
+    cachePlayerData(playerId, { data: profile.data, updatedAt: Date.now() });
     const id = `srv-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
     const state = ensureServerState(id, {
       name,
@@ -2883,18 +2973,21 @@ app.post("/api/save", async (req, res) => {
       delete guardedData.state.indexTab;
     }
     const safeData = ensurePlayerDataShape({ data: guardedData }, slot).data;
-    await setPlayerDocMerge(playerId, {
+    
+    // Cache the data instead of immediate Firebase write
+    cachePlayerData(playerId, {
       slot,
       data: safeData,
       [`slots.${serverId}`]: slot,
       [`lastPosByServer.${serverId}`]: pos,
       lastPos: pos,
       updatedAt: Date.now()
-    }, decoded || null);
+    });
+    
     serverState.activeSnapshots.set(playerId, buildWorldSnapshot(safeData));
     broadcastStateSync(serverState, playerId);
 
-    res.json({ ok: true });
+    res.json({ ok: true, batched: true }); // Indicate it's batched
   } catch (err) {
     console.error("/api/save failed", err);
     if (err && err.firestoreTransient) {
@@ -2960,11 +3053,12 @@ app.post("/api/daily/claim", async (req, res) => {
       addLuckyByRank(player.data.state, luckyRankKey, luckyAmount);
     }
 
-    await setPlayerDocMerge(playerId, {
+    // Cache the data instead of immediate Firebase write
+    cachePlayerData(playerId, {
       data: player.data,
       daily: player.daily,
       updatedAt: Date.now()
-    }, decoded || null);
+    });
 
     const result = {
       granted: true,
@@ -4328,9 +4422,13 @@ wss.on("connection", (ws, req) => {
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", async () => {
     // Ignore stale socket closes (e.g., when a newer socket replaced this one).
     if (serverState.socketsByPlayer.get(playerId) !== ws) return;
+    
+    // Save player data immediately when disconnecting
+    await savePlayerDataImmediate(playerId);
+    
     for (const steal of [...serverState.activeSteals.values()]) {
       if (String(steal.thiefId || "") === playerId || String(steal.ownerId || "") === playerId) {
         cancelSteal(serverState, steal, "offline", playerId);
@@ -4372,5 +4470,19 @@ loadPersistedServers().finally(() => {
     console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
     console.log(`[Firebase] project=${firebaseProjectId || "unset"} configured=${hasFirebaseConfig ? "yes" : "no"}`);
     console.log(`[Firebase] collections(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID}, servers=${SERVERS_COLLECTION_ID})`);
+    console.log(`[Batch Save] Enabled - saving to Firebase every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
   });
+});
+
+// Graceful shutdown handler
+process.on('SIGTERM', async () => {
+  console.log('[Graceful Shutdown] SIGTERM received, saving all cached player data...');
+  await batchSaveDirtyPlayers();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[Graceful Shutdown] SIGINT received, saving all cached player data...');
+  await batchSaveDirtyPlayers();
+  process.exit(0);
 });
