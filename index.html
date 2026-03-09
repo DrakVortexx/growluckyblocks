@@ -4907,6 +4907,13 @@
       const normalizedCode = code.trim().toLowerCase();
       redeemMessageEl.textContent = "";
       
+      // Check if code was already redeemed
+      if (state.redeemedCodes && state.redeemedCodes.includes(normalizedCode)) {
+        redeemMessageEl.textContent = "❌ This code has already been redeemed!";
+        redeemMessageEl.style.color = "#ff6b6b";
+        return;
+      }
+      
       if (normalizedCode === "secret") {
         // Give secret lucky block
         try {
@@ -4916,6 +4923,10 @@
             state.specialLuckyInventory[secretKey] = { normal: 0, bluemoon: 0, soulbound: 0 };
           }
           state.specialLuckyInventory[secretKey].normal = (state.specialLuckyInventory[secretKey].normal || 0) + 1;
+          
+          // Mark code as redeemed
+          if (!state.redeemedCodes) state.redeemedCodes = [];
+          state.redeemedCodes.push(normalizedCode);
           
           redeemMessageEl.textContent = "✅ Success! You received a Secret Lucky Block!";
           redeemMessageEl.style.color = "#90EE90";
@@ -5484,6 +5495,7 @@
           inventoryQuery: state.inventoryQuery,
           inventoryFocus: state.inventoryFocus,
           inventoryTab: state.inventoryTab,
+          redeemedCodes: state.redeemedCodes || [],
           indexTab: state.indexTab,
           indexSeen: state.indexSeen,
           indexBlueMoonSeen: state.indexBlueMoonSeen,
@@ -5645,6 +5657,7 @@
       state.inventoryQuery = String(loaded.inventoryQuery || "");
       state.inventoryFocus = String(loaded.inventoryFocus || "");
       state.inventoryTab = String(loaded.inventoryTab || "lucky").toLowerCase() === "creatures" ? "creatures" : "lucky";
+      state.redeemedCodes = Array.isArray(loaded.redeemedCodes) ? loaded.redeemedCodes : [];
       state.indexTab = String(loaded.indexTab || "creatures").toLowerCase() === "bluemoon" ? "bluemoon" : "creatures";
       state.indexSeen = cleanSeenMap(loaded.indexSeen || {});
       state.indexBlueMoonSeen = cleanSeenMap(loaded.indexBlueMoonSeen || {});
