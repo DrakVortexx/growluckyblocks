@@ -44,7 +44,7 @@ F → Open a lucky block on a filled pedestal
 
 Q → Open Seed Shack UI
 
-` → Open/close inventory
+TAB → Open/close inventory
 
 T → Open trade panel
 
