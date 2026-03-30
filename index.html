@@ -2015,8 +2015,8 @@
     </div>
   </div>
   <div id="fusePanel" class="panel" style="display:none;left:50%;top:50%;transform:translate(-50%,-50%);z-index:86;min-width:430px;max-width:min(94vw,560px);padding:14px;">
-    <h3 style="margin:0 0 6px">Leprechaun Fuse</h3>
-    <div id="fuseInfo" style="font-size:13px;color:#d9ecff;margin-bottom:8px">Select 4 creatures to fuse.</div>
+    <h3 style="margin:0 0 6px">Easter Fuse</h3>
+    <div id="fuseInfo" style="font-size:13px;color:#d9ecff;margin-bottom:8px">Select 4 creatures to start an Easter egg fusion.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <select id="fusePick1" style="padding:6px"></select>
       <select id="fusePick2" style="padding:6px"></select>
@@ -2026,6 +2026,7 @@
     <div id="fuseOdds" style="font-size:12px;color:#cce7ff;margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="fuseClose" class="btn">Close</button>
+      <button id="fuseReveal" class="btn" style="background:rgba(255,183,77,.92);border-color:rgba(255,225,165,.72)">Reveal Instantly (💫 150)</button>
       <button id="fuseDo" class="btn" style="background:rgba(66,165,92,.9);border-color:rgba(160,240,175,.6)">Fuse 4</button>
     </div>
   </div>
@@ -2184,7 +2185,8 @@
       cooldownSec: 20,
       desc: "Freezes a target player for 10s."
     });
-    const FUSE_COOLDOWN_SEC = 60 * 60;
+    const EASTER_FUSE_INCUBATION_SEC = 60 * 60;
+    const EASTER_FUSE_INSTANT_REVEAL_COST = 150;
     const TUTORIAL_LAST_STEP = 8;
 
     const canvas = document.getElementById("game");
@@ -2241,6 +2243,7 @@
     const fusePick3El = document.getElementById("fusePick3");
     const fusePick4El = document.getElementById("fusePick4");
     const fuseCloseEl = document.getElementById("fuseClose");
+    const fuseRevealEl = document.getElementById("fuseReveal");
     const fuseDoEl = document.getElementById("fuseDo");
     const dailyPanelEl = document.getElementById("dailyPanel");
     const dailyInfoEl = document.getElementById("dailyInfo");
@@ -2414,7 +2417,7 @@
       offlineMode: false
     };
 
-    const CREATURE_NAMES_BY_RANK = {
+    const BASE_CREATURE_NAMES_BY_RANK = {
       basic: ["Fat Cat", "Tiny Bunny", "Lucky Slime"],
       common: ["Mini Dragon", "Goblin Pup"],
       rare: ["Ice Fox", "Lava Toad", "Spike Turtle"],
@@ -2422,24 +2425,42 @@
       legendary: ["Golden Griffin", "Crystal Wolf", "Little ball of fury"],
       mythic: ["Celestial Cat", "Moon Serpent", "Starry Elk"],
       godly: ["Omnisphinx", "Thunder Behemoth", "Eternal Fox"],
-  secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger", "The Tuff Turtle", "Los Tuff Turtles"],
+      secret: ["Void Kraken", "Ghost Unicorn", "Arcane Tiger", "The Tuff Turtle", "Los Tuff Turtles"],
       transcendent: ["Infinity Serpent", "Quantum Phoenix", "Cosmic Whale"],
       omniversal: ["Mystery Cat", "Universe Hydra", "Multiverse Dragon"]
     };
+    const EASTER_CREATURE_NAMES_BY_RANK = {
+      basic: ["Spring Chick"],
+      common: ["Basket Mouse"],
+      rare: ["Egg Hopper"],
+      epic: ["Carrot Fox"],
+      legendary: ["Pastel Pegasus"],
+      mythic: ["Bloom Hare"],
+      godly: ["Jellybean Golem"],
+      secret: ["Egg Emperor"],
+      transcendent: ["Celestial Bunny"],
+      omniversal: ["Easter Bunny"]
+    };
+    const CREATURE_NAMES_BY_RANK = Object.fromEntries(
+      RANKS.map((rank) => [
+        rank.key,
+        [...(BASE_CREATURE_NAMES_BY_RANK[rank.key] || []), ...(EASTER_CREATURE_NAMES_BY_RANK[rank.key] || [])]
+      ])
+    );
     const INDEX_ENTRIES = RANKS.flatMap((rank) =>
       (CREATURE_NAMES_BY_RANK[rank.key] || []).map((name) => ({ rank, name }))
     );
-    const LEPRECHAUN_FUSE_OUTCOMES = [
-      { name: "Lucky Slime", rankKey: "basic", trait: "none" },
-      { name: "Mini Dragon", rankKey: "common", trait: "none" },
-      { name: "Ice Fox", rankKey: "rare", trait: "none" },
-      { name: "Hydra Dragon", rankKey: "epic", trait: "none" },
-      { name: "Golden Griffin", rankKey: "legendary", trait: "none" },
-      { name: "Celestial Cat", rankKey: "mythic", trait: "none" },
-      { name: "Omnisphinx", rankKey: "godly", trait: "none" },
-      { name: "Void Kraken", rankKey: "secret", trait: "none" },
-      { name: "Infinity Serpent", rankKey: "transcendent", trait: "none" },
-      { name: "Mystery Cat", rankKey: "omniversal", trait: "leprechaun" }
+    const EASTER_FUSE_OUTCOMES = [
+      { name: "Spring Chick", rankKey: "basic", trait: "none" },
+      { name: "Basket Mouse", rankKey: "common", trait: "none" },
+      { name: "Egg Hopper", rankKey: "rare", trait: "none" },
+      { name: "Carrot Fox", rankKey: "epic", trait: "none" },
+      { name: "Pastel Pegasus", rankKey: "legendary", trait: "none" },
+      { name: "Bloom Hare", rankKey: "mythic", trait: "none" },
+      { name: "Jellybean Golem", rankKey: "godly", trait: "none" },
+      { name: "Egg Emperor", rankKey: "secret", trait: "none" },
+      { name: "Celestial Bunny", rankKey: "transcendent", trait: "none" },
+      { name: "Easter Bunny", rankKey: "omniversal", trait: "none" }
     ];
     const SPECIAL_BLOCK_MAP = Object.fromEntries(SPECIAL_BLOCKS.map((s) => [s.key, s]));
 
@@ -2572,11 +2593,21 @@
       "golden griffin": 640, "crystal wolf": 780, "little ball of fury": 700,
       "celestial cat": 2100, "moon serpent": 2550, "starry elk": 2980,
       "omnisphinx": 52000, "thunder behemoth": 84000, "eternal fox": 118000,
-  "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
-  "the tuff turtle": 5000000,
-  "los tuff turtles": 15000000,
+      "void kraken": 1200000, "ghost unicorn": 2100000, "arcane tiger": 2950000,
+      "the tuff turtle": 5000000,
+      "los tuff turtles": 15000000,
       "infinity serpent": 120000000, "quantum phoenix": 180000000, "cosmic whale": 245000000,
-      "mystery cat": 700000000, "universe hydra": 620000000, "multiverse dragon": 880000000
+      "mystery cat": 700000000, "universe hydra": 620000000, "multiverse dragon": 880000000,
+      "spring chick": 5,
+      "basket mouse": 18,
+      "egg hopper": 72,
+      "carrot fox": 280,
+      "pastel pegasus": 760,
+      "bloom hare": 2600,
+      "jellybean golem": 96000,
+      "egg emperor": 8500000,
+      "celestial bunny": 220000000,
+      "easter bunny": 400000000
     };
     const LOW_QUALITY_MOBILE = MOBILE_DETECTED;
     const MOBILE_PARTICLE_SCALE = LOW_QUALITY_MOBILE ? 0.45 : 1;
@@ -2722,6 +2753,7 @@
       tutorialTriedThirdPerson: false,
       tutorialTriedFirstPerson: false,
       fuseReadyAt: 0,
+      easterFuse: null,
       quests: [
         { id: "q1", text: "Harvest 5 crops", target: 5, type: "harvest", reward: 550, done: false },
         { id: "q2", text: "Collect 8 creatures", target: 8, type: "creatures", reward: 2500, done: false },
@@ -5507,6 +5539,7 @@
           tutorialTriedThirdPerson: !!state.tutorialTriedThirdPerson,
           tutorialTriedFirstPerson: !!state.tutorialTriedFirstPerson,
           fuseReadyAt: Math.max(0, Number(state.fuseReadyAt || 0)),
+          easterFuse: easterFusePending(),
           quests: state.quests.map((q) => ({ id: q.id, done: q.done })),
           info: state.info
         },
@@ -5621,6 +5654,20 @@
       }
       state.tutorialTriedThirdPerson = !!loaded.tutorialTriedThirdPerson;
       state.tutorialTriedFirstPerson = !!loaded.tutorialTriedFirstPerson;
+      state.easterFuse = null;
+      if (loaded.easterFuse && typeof loaded.easterFuse === "object") {
+        const pendingName = String(loaded.easterFuse.name || "").trim();
+        if (pendingName) {
+          state.easterFuse = {
+            name: pendingName,
+            rankKey: normalizeBlockKey(loaded.easterFuse.rankKey || "basic"),
+            mutation: normalizeMutation(loaded.easterFuse.mutation || "normal"),
+            trait: normalizeTrait(loaded.easterFuse.trait || "none"),
+            startedAt: Math.max(0, Number(loaded.easterFuse.startedAt || 0)),
+            readyAt: Math.max(0, Number(loaded.easterFuse.readyAt || 0))
+          };
+        }
+      }
       if (state.tutorialCompleted) {
         state.tutorialStep = TUTORIAL_LAST_STEP + 1;
       } else {
@@ -7452,10 +7499,10 @@
       fuseTop.castShadow = true;
       scene.add(fuseTop);
       registerInteractable({
-        name: "Leprechaun Fuse Machine",
+        name: "Easter Fuse Machine",
         position: new THREE.Vector3(-2.6, 0, 4.25),
         radius: 2.6,
-        prompt: "[E] Open Leprechaun Fuse",
+        prompt: "[E] Open Easter Fuse",
         interact() {
           toggleFusePanel(true);
         }
@@ -8353,7 +8400,7 @@
       const trait = normalizeTrait(opts.trait || "none");
       const blueMoon = mutation === "bluemoon";
       const soulbound = mutation === "soulbound";
-      const fromRankPool = CREATURE_NAMES_BY_RANK[rank.key] || [];
+      const fromRankPool = BASE_CREATURE_NAMES_BY_RANK[rank.key] || CREATURE_NAMES_BY_RANK[rank.key] || [];
       const name = forcedName || (
         fromRankPool.length
           ? fromRankPool[Math.floor(Math.random() * fromRankPool.length)]
@@ -9584,7 +9631,7 @@
     }
 
     function buildLeprechaunFuseOdds(selectedCreatures) {
-      const outcomes = LEPRECHAUN_FUSE_OUTCOMES;
+      const outcomes = EASTER_FUSE_OUTCOMES;
       if (!Array.isArray(selectedCreatures) || selectedCreatures.length < 1) {
         const equal = 1 / Math.max(1, outcomes.length);
         return {
@@ -9598,11 +9645,11 @@
         const ranks = selectedCreatures.map(c => normalizeBlockKey(c?.rank?.key || c?.rankKey || "basic"));
         const rates = selectedCreatures.map(c => Number(c.rate || 0));
         
-        // 4 Transcendents → 1% Omniversal
+        // 4 Transcendents -> boosted Omniversal chance.
         if (ranks.every(r => r === "transcendent")) {
           const weights = outcomes.map((_, i) => {
-            if (outcomes[i].rankKey === "omniversal") return 0.01; // 1%
-            return (0.99 / (outcomes.length - 1)); // Distribute remaining 99%
+            if (outcomes[i].rankKey === "omniversal") return 0.12;
+            return (0.88 / (outcomes.length - 1));
           });
           const total = weights.reduce((sum, w) => sum + w, 0);
           return {
@@ -9611,13 +9658,13 @@
           };
         }
         
-        // 4 Secrets → Transcendent chance based on rate
+        // 4 Secrets -> solid Transcendent odds with stronger inputs.
         if (ranks.every(r => r === "secret")) {
           const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
-          let transcendentChance = 0.05; // Default 5% for under 2M/s
+          let transcendentChance = 0.16;
           
           if (avgRate >= 2000000 && avgRate < 100000000) {
-            transcendentChance = 0.20; // 20% for 2M/s to 100M/s
+            transcendentChance = 0.28;
           }
           
           const weights = outcomes.map((_, i) => {
@@ -9656,11 +9703,11 @@
 
       // Much harder top outcome scaling
       const topIdx = outcomes.length - 1;
-      const topScaleBase = 0.02 + (normalizedQuality * normalizedQuality * 0.8); // Reduced from 0.06 and 1.65
+      const topScaleBase = 0.03 + (normalizedQuality * normalizedQuality * 0.92);
       const topScale = topScaleBase
-        * (hasLepTraitInput ? 1.1 : 1) // Reduced from 1.22
-        * (maxRank >= 8 ? 1.05 : 1); // Reduced from 1.14
-      weights[topIdx] *= Math.max(0.01, Math.min(1.5, topScale)); // Reduced max from 3.6
+        * (hasLepTraitInput ? 1.08 : 1)
+        * (maxRank >= 8 ? 1.08 : 1);
+      weights[topIdx] *= Math.max(0.015, Math.min(1.8, topScale));
 
       const total = weights.reduce((sum, w) => sum + Math.max(1e-9, w), 0);
       const chances = weights.map((w) => (Math.max(1e-9, w) / Math.max(1e-9, total)) * 100);
@@ -9674,9 +9721,81 @@
       let roll = Math.random() * Math.max(1e-9, total);
       for (let i = 0; i < weights.length; i += 1) {
         roll -= Math.max(1e-9, Number(weights[i] || 0));
-        if (roll <= 0) return LEPRECHAUN_FUSE_OUTCOMES[i];
+        if (roll <= 0) return EASTER_FUSE_OUTCOMES[i];
       }
-      return LEPRECHAUN_FUSE_OUTCOMES[0];
+      return EASTER_FUSE_OUTCOMES[0];
+    }
+
+    function easterFusePending() {
+      const pending = state.easterFuse;
+      if (!pending || typeof pending !== "object") return null;
+      const name = String(pending.name || "").trim();
+      if (!name) return null;
+      return {
+        name,
+        rankKey: normalizeBlockKey(pending.rankKey || "basic"),
+        mutation: normalizeMutation(pending.mutation || "normal"),
+        trait: normalizeTrait(pending.trait || "none"),
+        startedAt: Math.max(0, Number(pending.startedAt || 0)),
+        readyAt: Math.max(0, Number(pending.readyAt || 0))
+      };
+    }
+
+    function easterFuseSecondsLeft(nowSec = realNowSec()) {
+      const pending = easterFusePending();
+      if (!pending) return 0;
+      return Math.max(0, Math.ceil(pending.readyAt - nowSec));
+    }
+
+    function revealPendingEasterFuse(forceReveal = false) {
+      const pending = easterFusePending();
+      if (!pending) return false;
+      const nowSec = realNowSec();
+      if (!forceReveal && nowSec < pending.readyAt) return false;
+      const freePedestal = findFreeCreaturePedestal();
+      if (!freePedestal) return false;
+      const rank = getRankByKey(pending.rankKey || "basic");
+      const created = spawnCreatureOnPedestal(rank, null, freePedestal, pending.name, {
+        mutation: pending.mutation,
+        trait: pending.trait
+      });
+      if (!created) return false;
+      state.easterFuse = null;
+      state.info = `Easter fuse revealed: ${created.name} (${rank.label}) is ready on your pedestal.`;
+      return true;
+    }
+
+    function revealEasterFuseInstantly() {
+      const pending = easterFusePending();
+      if (!pending) {
+        state.info = "No Easter egg is incubating right now.";
+        updateUI();
+        return;
+      }
+      const left = easterFuseSecondsLeft();
+      if (left <= 0) {
+        state.info = revealPendingEasterFuse(true)
+          ? state.info
+          : "Your Easter egg is ready, but you need an empty pedestal to reveal it.";
+        renderFusePanel();
+        updateUI();
+        return;
+      }
+      if (state.stardust < EASTER_FUSE_INSTANT_REVEAL_COST) {
+        state.info = `Need 💫 ${formatNumber(EASTER_FUSE_INSTANT_REVEAL_COST)} to reveal this Easter egg instantly.`;
+        updateUI();
+        return;
+      }
+      state.stardust = Math.max(0, Number(state.stardust || 0) - EASTER_FUSE_INSTANT_REVEAL_COST);
+      state.easterFuse = {
+        ...pending,
+        readyAt: realNowSec()
+      };
+      state.info = revealPendingEasterFuse(true)
+        ? state.info
+        : "Instant reveal purchased. Free up a pedestal and your Easter creature will appear right away.";
+      renderFusePanel();
+      updateUI();
     }
 
     function renderFusePanel() {
@@ -9703,21 +9822,29 @@
       const strength = selectedCreatures.length >= 1 ? computeFuseStrength(selectedCreatures) : 0;
       const odds = buildLeprechaunFuseOdds(selectedCreatures);
       const chances = Array.isArray(odds?.chances) ? odds.chances : [];
-      fuseInfoEl.textContent = list.length < 4
-        ? "You need at least 4 creatures on pedestals."
-        : "Select 4 creatures to fuse. Better creatures improve your odds.";
-      const rows = LEPRECHAUN_FUSE_OUTCOMES.map((o, idx) => {
+      const pending = easterFusePending();
+      const left = easterFuseSecondsLeft();
+      fuseInfoEl.textContent = pending
+        ? (left > 0
+          ? `An Easter egg is incubating. ${formatDuration(left)} left, or spend 💫 ${formatNumber(EASTER_FUSE_INSTANT_REVEAL_COST)} to reveal it now.`
+          : "Your Easter egg is ready. Clear a pedestal and it will reveal automatically.")
+        : (list.length < 4
+          ? "You need at least 4 creatures on pedestals."
+          : "Select 4 creatures to start a 60-minute Easter egg fusion.");
+      const rows = EASTER_FUSE_OUTCOMES.map((o, idx) => {
         const rank = getRankByKey(o.rankKey);
         const pct = Number(chances[idx] || 0);
         const badge = normalizeTrait(o.trait || "none") === "leprechaun" ? " [Leprechaun]" : "";
         return `<div style="display:flex;justify-content:space-between;gap:8px"><span class="${rank.color}">${o.name}${badge}</span><span>${formatNumber(pct)}%</span></div>`;
       }).join("");
       const topChance = Number(chances[chances.length - 1] || 0);
-      const nowSec = realNowSec();
-      const cdLeft = Math.max(0, Math.ceil(Number(state.fuseReadyAt || 0) - nowSec));
-      fuseOddsEl.innerHTML = `<div style="margin-bottom:6px">Fuse quality: <b>${formatNumber(strength)}</b> | Leprechaun result: <b>${formatNumber(topChance)}%</b></div><div style="margin-bottom:6px;color:${cdLeft > 0 ? "#ffd7a5" : "#b9ffd3"}">Fuse cooldown: <b>${cdLeft > 0 ? formatDuration(cdLeft) : "Ready"}</b></div>${rows}`;
-      fuseDoEl.disabled = unique.length !== 4 || cdLeft > 0;
-      fuseDoEl.textContent = cdLeft > 0 ? `Fuse ready in ${formatDuration(cdLeft)}` : "Fuse 4";
+      fuseOddsEl.innerHTML = pending
+        ? `<div style="margin-bottom:6px">Queued result: <b class="${getRankByKey(pending.rankKey).color}">${pending.name}</b></div><div style="margin-bottom:6px;color:${left > 0 ? "#ffd7a5" : "#b9ffd3"}">Reveal timer: <b>${left > 0 ? formatClockSeconds(left) : "Ready now"}</b></div><div style="margin-bottom:6px;color:#ffe6b0">${left > 0 ? `Instant reveal costs 💫 ${formatNumber(EASTER_FUSE_INSTANT_REVEAL_COST)}.` : "Keep one pedestal empty so the creature can appear."}</div>${rows}`
+        : `<div style="margin-bottom:6px">Fuse quality: <b>${formatNumber(strength)}</b> | Easter Bunny chance: <b>${formatNumber(topChance)}%</b></div><div style="margin-bottom:6px;color:#b9ffd3">Incubation time: <b>${formatDuration(EASTER_FUSE_INCUBATION_SEC)}</b></div>${rows}`;
+      fuseDoEl.disabled = !!pending || unique.length !== 4;
+      fuseDoEl.textContent = pending ? "Egg incubating..." : "Start Easter Fuse";
+      fuseRevealEl.disabled = !pending || left <= 0;
+      fuseRevealEl.textContent = `Reveal Instantly (💫 ${formatNumber(EASTER_FUSE_INSTANT_REVEAL_COST)})`;
     }
 
     function toggleFusePanel(force = null) {
@@ -9739,10 +9866,8 @@
     }
 
     function runLeprechaunFuse() {
-      const nowSec = realNowSec();
-      const cdLeft = Math.max(0, Math.ceil(Number(state.fuseReadyAt || 0) - nowSec));
-      if (cdLeft > 0) {
-        state.info = `Fuse is on cooldown for ${formatDuration(cdLeft)}.`;
+      if (easterFusePending()) {
+        state.info = "An Easter egg is already incubating.";
         renderFusePanel();
         updateUI();
         return;
@@ -9762,27 +9887,20 @@
         updateUI();
         return;
       }
-      const freePedestal = findFreeCreaturePedestal();
-      if (!freePedestal) {
-        state.info = "Need an empty pedestal before fusing.";
-        updateUI();
-        return;
-      }
       for (const c of selected) removeCreatureLocal(c.id);
       const outcome = rollLeprechaunFuseOutcome(selected);
-      const rank = getRankByKey(outcome.rankKey || "basic");
       const inheritedMutation = normalizeMutation(selected.sort((a, b) => mutationMultiplier(b.mutation || "normal") - mutationMultiplier(a.mutation || "normal"))[0]?.mutation || "normal");
       const finalTrait = normalizeTrait(outcome.trait || "none");
-      const created = spawnCreatureOnPedestal(rank, null, freePedestal, outcome.name, {
+      const nowSec = realNowSec();
+      state.easterFuse = {
+        name: outcome.name,
+        rankKey: normalizeBlockKey(outcome.rankKey || "basic"),
         mutation: inheritedMutation,
-        trait: finalTrait
-      });
-      if (created) {
-        state.info = `Fuse success: ${finalTrait === "leprechaun" ? "[Leprechaun] " : ""}${created.name} (${rank.label}) created.`;
-        state.fuseReadyAt = realNowSec() + FUSE_COOLDOWN_SEC;
-      } else {
-        state.info = "Fuse failed. Try again.";
-      }
+        trait: finalTrait,
+        startedAt: nowSec,
+        readyAt: nowSec + EASTER_FUSE_INCUBATION_SEC
+      };
+      state.info = `${outcome.name} is incubating. Come back in ${formatDuration(EASTER_FUSE_INCUBATION_SEC)} or spend 💫 ${formatNumber(EASTER_FUSE_INSTANT_REVEAL_COST)} to reveal it instantly.`;
       renderFusePanel();
       updateUI();
     }
@@ -9882,6 +10000,7 @@
     }
 
     function updateUI() {
+      revealPendingEasterFuse(false);
       renderHudOnly();
       renderStatusTimers();
       dockShopBtn.classList.toggle("active", !!state.shopOpen);
@@ -10166,6 +10285,7 @@
         void runAdminCommand(`broadcast ${text}`);
       });
       fuseCloseEl?.addEventListener("click", () => toggleFusePanel(false));
+      fuseRevealEl?.addEventListener("click", () => revealEasterFuseInstantly());
       fuseDoEl?.addEventListener("click", () => runLeprechaunFuse());
       for (const sel of [fusePick1El, fusePick2El, fusePick3El, fusePick4El]) {
         sel?.addEventListener("change", () => renderFusePanel());
