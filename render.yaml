@@ -1,0 +1,35 @@
+services:
+  # Web Service
+  - type: web
+    name: grow-lucky-blocks
+    env: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    healthCheckPath: /
+    autoDeploy: true
+    
+    # Environment Variables (set these in Render dashboard)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false  # Set in Render dashboard
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false  # Set in Render dashboard  
+      - key: SUPABASE_ANON_KEY
+        sync: false  # Set in Render dashboard
+      - key: SUPABASE_PLAYERS_TABLE_ID
+        value: player_data
+
+# Configuration for deploying to Render.com
+# Instructions:
+# 1. Set up Supabase project and get credentials
+# 2. Add environment variables in Render dashboard:
+#    - SUPABASE_URL: your Supabase project URL
+#    - SUPABASE_SERVICE_ROLE_KEY: your Supabase service role key
+#    - SUPABASE_ANON_KEY: your Supabase anonymous key
+# 3. Deploy this repository to Render
+# 4. The app will be available at your-app-name.onrender.com

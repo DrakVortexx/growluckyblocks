@@ -1,7 +1,7 @@
 const http = require("http");
 const express = require("express");
 const { randomUUID } = require("crypto");
-const { supabase, hasSupabaseConfig, supabaseUrl } = require("./supabase.js");
+const { supabase, supabaseAuth, hasSupabaseConfig, supabaseUrl } = require("./supabase.js");
 const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -1220,6 +1220,28 @@ app.use(express.static(__dirname));
 
 async function verifyAuth(req, res, opts = {}) {
   const strict = opts.strict !== false;
+  
+  // Check for Supabase JWT token (email/password auth)
+  const authHeader = String(req.headers.authorization || "").trim();
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const supabaseToken = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
+  
+  if (supabaseToken && supabaseToken.startsWith('eyJ')) {
+    try {
+      const { data: { user }, error } = await supabaseAuth.auth.getUser(supabaseToken);
+      if (!error && user) {
+        return {
+          uid: String(user.id),
+          email: String(user.email || ""),
+          name: String(user.user_metadata?.username || user.email?.split('@')[0] || ""),
+          isSupabaseAuth: true,
+          token: supabaseToken
+        };
+      }
+    } catch (err) {
+      console.error("Failed to verify Supabase token:", err);
+    }
+  }
   
   // Check for CrazyGames user in headers (common pattern for CrazyGames SDK)
   const crazyGamesUser = req.headers['x-crazygames-user'];
@@ -2453,6 +2475,105 @@ async function getCashLeaderboardCached(limit = 10) {
     leaderboardCashInFlight = false;
   }
 }
+
+// Supabase email/password authentication endpoints
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const { email, password, username } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+    
+    if (!username || username.length < 3) {
+      return res.status(400).json({ error: "Username must be at least 3 characters" });
+    }
+    
+    // Check if username is already taken
+    const existingUserId = await findPlayerIdByUsername(username);
+    if (existingUserId) {
+      return res.status(409).json({ error: "Username already taken" });
+    }
+    
+    // Create user with Supabase Auth
+    const { data, error } = await supabaseAuth.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username
+        }
+      }
+    });
+    
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    
+    res.json({ 
+      ok: true, 
+      message: "Account created successfully",
+      user: {
+        id: data.user?.id,
+        email: data.user?.email,
+        username
+      }
+    });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+    
+    // Sign in with Supabase Auth
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
+      email,
+      password
+    });
+    
+    if (error) {
+      return res.status(401).json({ error: error.message });
+    }
+    
+    res.json({ 
+      ok: true, 
+      token: data.session?.access_token,
+      user: {
+        id: data.user?.id,
+        email: data.user?.email,
+        username: data.user?.user_metadata?.username || data.user?.email?.split('@')[0]
+      }
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  try {
+    const authHeader = String(req.headers.authorization || "").trim();
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const token = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
+    
+    if (token) {
+      await supabaseAuth.auth.signOut();
+    }
+    
+    res.json({ ok: true, message: "Logged out successfully" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 app.get("/api/auth/username/check", async (req, res) => {
   try {

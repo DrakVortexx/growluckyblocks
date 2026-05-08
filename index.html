@@ -2065,6 +2065,7 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
     import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
     const RANKS = [
       { key: "basic", label: "Basic", min: 1, max: 3, weight: 50, color: "c-basic" },
@@ -2368,16 +2369,36 @@
       return !!(coarse || touch || uaMobile || narrowTouch);
     })();
     const REMOTE_FIELD_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x7a5d3a });
-    // New Authentication System
+    // Enhanced Authentication System - Supports Supabase, CrazyGames, and Guest
     let currentUser = null;
     let authToken = null;
+    let supabaseClient = null;
     const GUEST_STORAGE_KEY = "glb_guest_user_id";
+    const SUPABASE_TOKEN_KEY = "glb_supabase_token";
     
     // Check for CrazyGames SDK
     function isCrazyGamesEnvironment() {
       return typeof window !== 'undefined' && 
              (window.CrazyGames || window.parent?.CrazyGames || 
               window.location.hostname.includes('crazygames'));
+    }
+    
+    // Initialize Supabase client for frontend
+    function initializeSupabaseClient() {
+      if (supabaseClient) return supabaseClient;
+      
+      // Use environment variables or fallback
+      const supabaseUrl = window.SUPABASE_URL || 'https://your-project.supabase.co';
+      const supabaseAnonKey = window.SUPABASE_ANON_KEY || 'your-anon-key';
+      
+      supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true
+        }
+      });
+      
+      return supabaseClient;
     }
     
     // Generate guest user ID
@@ -2392,8 +2413,32 @@
     
     // Initialize authentication
     async function initializeAuth() {
+      // First check for existing Supabase session
+      const savedToken = localStorage.getItem(SUPABASE_TOKEN_KEY);
+      if (savedToken && !isCrazyGamesEnvironment()) {
+        try {
+          const supabase = initializeSupabaseClient();
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (session && !error) {
+            currentUser = {
+              uid: session.user.id,
+              email: session.user.email || "",
+              name: session.user.user_metadata?.username || session.user.email?.split('@')[0] || "",
+              isSupabaseAuth: true
+            };
+            authToken = session.access_token;
+            localStorage.setItem(SUPABASE_TOKEN_KEY, session.access_token);
+            return currentUser;
+          }
+        } catch (err) {
+          console.log('Supabase session check failed:', err);
+          localStorage.removeItem(SUPABASE_TOKEN_KEY);
+        }
+      }
+      
+      // Try CrazyGames authentication
       if (isCrazyGamesEnvironment()) {
-        // Try CrazyGames authentication
         try {
           const crazyGames = window.CrazyGames || window.parent?.CrazyGames;
           if (crazyGames && crazyGames.getUser) {
@@ -2425,6 +2470,41 @@
       };
       authToken = `guest-${guestId}`;
       return currentUser;
+    }
+    
+    // Supabase authentication functions
+    async function signUpWithEmail(email, password, username) {
+      try {
+        const response = await apiJson("/api/auth/signup", "POST", { email, password, username });
+        return response;
+      } catch (err) {
+        throw err;
+      }
+    }
+    
+    async function signInWithEmail(email, password) {
+      try {
+        const response = await apiJson("/api/auth/login", "POST", { email, password });
+        if (response.ok && response.token) {
+          localStorage.setItem(SUPABASE_TOKEN_KEY, response.token);
+        }
+        return response;
+      } catch (err) {
+        throw err;
+      }
+    }
+    
+    async function signOut() {
+      try {
+        if (currentUser?.isSupabaseAuth) {
+          await apiJson("/api/auth/logout", "POST", null);
+          localStorage.removeItem(SUPABASE_TOKEN_KEY);
+        }
+        currentUser = null;
+        authToken = null;
+      } catch (err) {
+        console.error('Sign out error:', err);
+      }
     }
 
     let authMode = "signup";
@@ -4670,7 +4750,10 @@
       
       // Prepare headers for new authentication system
       const headers = {};
-      if (currentUser?.isCrazyGames) {
+      if (currentUser?.isSupabaseAuth) {
+        // Send Supabase JWT token in Authorization header
+        headers["authorization"] = `Bearer ${token}`;
+      } else if (currentUser?.isCrazyGames) {
         // Send CrazyGames user info in header
         headers["x-crazygames-user"] = JSON.stringify({
           userId: currentUser.uid,
@@ -4678,9 +4761,13 @@
           email: currentUser.email,
           avatar: currentUser.avatar
         });
+        headers["x-player-id"] = currentUser.uid;
+        headers["x-auth-token"] = token;
+      } else {
+        // Guest user
+        headers["x-player-id"] = currentUser.uid;
+        headers["x-auth-token"] = token;
       }
-      headers["x-player-id"] = currentUser.uid;
-      headers["x-auth-token"] = token;
       
       try {
         return await apiJson(url, method, body, token, headers);
@@ -4691,16 +4778,21 @@
         if (!token) throw new Error("Session expired. Please reconnect.");
         // Retry with refreshed token
         const retryHeaders = {};
-        if (currentUser?.isCrazyGames) {
+        if (currentUser?.isSupabaseAuth) {
+          retryHeaders["authorization"] = `Bearer ${token}`;
+        } else if (currentUser?.isCrazyGames) {
           retryHeaders["x-crazygames-user"] = JSON.stringify({
             userId: currentUser.uid,
             username: currentUser.name,
             email: currentUser.email,
             avatar: currentUser.avatar
           });
+          retryHeaders["x-player-id"] = currentUser.uid;
+          retryHeaders["x-auth-token"] = token;
+        } else {
+          retryHeaders["x-player-id"] = currentUser.uid;
+          retryHeaders["x-auth-token"] = token;
         }
-        retryHeaders["x-player-id"] = currentUser.uid;
-        retryHeaders["x-auth-token"] = token;
         return apiJson(url, method, body, token, retryHeaders);
       }
     }
@@ -5433,14 +5525,32 @@
     }
 
     function setAuthMode(mode) {
-      // Simplified auth mode - just connect button
-      authMode = "connect";
-      if (authTabSignupEl) authTabSignupEl.style.display = "none";
-      if (authTabLoginEl) authTabLoginEl.style.display = "none";
-      if (authUsernameEl) authUsernameEl.style.display = "none";
-      if (authEmailEl) authEmailEl.style.display = "none";
-      if (authPasswordEl) authPasswordEl.style.display = "none";
-      if (authSubmitEl) authSubmitEl.textContent = "Connect to Game";
+      authMode = mode === "login" ? "login" : "signup";
+      const isCrazyGames = isCrazyGamesEnvironment();
+      
+      if (isCrazyGames) {
+        // CrazyGames environment - simple connect button
+        if (authTabSignupEl) authTabSignupEl.style.display = "none";
+        if (authTabLoginEl) authTabLoginEl.style.display = "none";
+        if (authUsernameEl) authUsernameEl.style.display = "none";
+        if (authEmailEl) authEmailEl.style.display = "none";
+        if (authPasswordEl) authPasswordEl.style.display = "none";
+        if (authSubmitEl) authSubmitEl.textContent = "Connect to Game";
+      } else {
+        // Normal browser - email/password forms
+        if (authTabSignupEl) authTabSignupEl.style.display = "block";
+        if (authTabLoginEl) authTabLoginEl.style.display = "block";
+        if (authUsernameEl) authUsernameEl.style.display = "block";
+        if (authEmailEl) authEmailEl.style.display = "block";
+        if (authPasswordEl) authPasswordEl.style.display = "block";
+        
+        const signup = authMode === "signup";
+        if (authTabSignupEl) authTabSignupEl.classList.toggle("active", signup);
+        if (authTabLoginEl) authTabLoginEl.classList.toggle("active", !signup);
+        if (authUsernameEl) authUsernameEl.style.display = signup ? "block" : "none";
+        if (authSubmitEl) authSubmitEl.textContent = signup ? "Create Account" : "Log In";
+      }
+      
       setAuthMessage("");
     }
 
@@ -5487,16 +5597,75 @@
     }
 
     async function submitAuth() {
-      // New authentication system - no email/password needed
+      const isCrazyGames = isCrazyGamesEnvironment();
+      
       authSubmitEl.disabled = true;
-      setAuthMessage("Connecting...", true);
+      
       try {
-        currentUser = await initializeAuth();
-        if (currentUser) {
-          setAuthMessage("Success!", true);
-          await refreshAuthState();
+        if (isCrazyGames) {
+          // CrazyGames authentication
+          setAuthMessage("Connecting to CrazyGames...", true);
+          currentUser = await initializeAuth();
+          if (currentUser) {
+            setAuthMessage("Connected!", true);
+            await refreshAuthState();
+          } else {
+            setAuthMessage("Failed to connect to CrazyGames.");
+          }
         } else {
-          setAuthMessage("Failed to authenticate.");
+          // Normal browser - Supabase email/password authentication
+          const email = authEmailEl?.value?.trim();
+          const password = authPasswordEl?.value;
+          const username = authUsernameEl?.value?.trim();
+          
+          if (!email || !password) {
+            setAuthMessage("Enter email and password.");
+            return;
+          }
+          
+          if (authMode === "signup" && username.length < 3) {
+            setAuthMessage("Username must be at least 3 characters.");
+            return;
+          }
+          
+          setAuthMessage(authMode === "signup" ? "Creating account..." : "Logging in...", true);
+          
+          try {
+            let response;
+            if (authMode === "signup") {
+              // Check username availability
+              const checkResponse = await apiJson(`/api/auth/username/check?username=${encodeURIComponent(username)}`);
+              if (!checkResponse?.available) {
+                setAuthMessage("That username is already taken. Pick a new one.");
+                return;
+              }
+              
+              response = await signUpWithEmail(email, password, username);
+              if (response.ok) {
+                setAuthMessage("Account created! Please check your email to verify, then log in.");
+                setAuthMode("login");
+                return;
+              }
+            } else {
+              response = await signInWithEmail(email, password);
+              if (response.ok && response.token) {
+                authToken = response.token;
+                currentUser = {
+                  uid: response.user.id,
+                  email: response.user.email,
+                  name: response.user.username,
+                  isSupabaseAuth: true
+                };
+                setAuthMessage("Success!", true);
+                await refreshAuthState();
+                return;
+              }
+            }
+            
+            setAuthMessage(response?.error || "Authentication failed.");
+          } catch (err) {
+            setAuthMessage(err?.payload?.error || err?.message || "Authentication failed.");
+          }
         }
       } catch (err) {
         setAuthMessage("Authentication failed.");
@@ -11158,8 +11327,21 @@
     }
 
     function initAuthFlow() {
-      setAuthMode("connect");
+      setAuthMode(isCrazyGamesEnvironment() ? "connect" : "signup");
       if (authSubmitEl) authSubmitEl.addEventListener("click", submitAuth);
+      
+      // Add event listeners for auth tabs
+      if (authTabSignupEl) authTabSignupEl.addEventListener("click", () => setAuthMode("signup"));
+      if (authTabLoginEl) authTabLoginEl.addEventListener("click", () => setAuthMode("login"));
+      
+      // Add enter key support for form fields
+      [authEmailEl, authPasswordEl, authUsernameEl].forEach((el) => {
+        if (el) {
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") submitAuth();
+          });
+        }
+      });
       serverRefreshBtn.addEventListener("click", async () => {
         serverRefreshBtn.disabled = true;
         setServerMessage("Refreshing...", true);
