@@ -2065,8 +2065,6 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
     import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
     const RANKS = [
       { key: "basic", label: "Basic", min: 1, max: 3, weight: 50, color: "c-basic" },
@@ -2370,26 +2368,73 @@
       return !!(coarse || touch || uaMobile || narrowTouch);
     })();
     const REMOTE_FIELD_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x7a5d3a });
-    const firebaseConfig = {
-      apiKey: "AIzaSyCQ4MgGoc8AAxeAnI3gaclfmjGo7NxcTp8",
-      authDomain: "grow-lucky-blocks.firebaseapp.com",
-      projectId: "grow-lucky-blocks",
-      storageBucket: "grow-lucky-blocks.firebasestorage.app",
-      messagingSenderId: "380551309029",
-      appId: "1:380551309029:web:b9efbc1f4551500eb2d60c"
-    };
-    const firebaseApp = initializeApp(firebaseConfig);
-    const auth = getAuth(firebaseApp);
+    // New Authentication System
+    let currentUser = null;
+    let authToken = null;
+    const GUEST_STORAGE_KEY = "glb_guest_user_id";
+    
+    // Check for CrazyGames SDK
+    function isCrazyGamesEnvironment() {
+      return typeof window !== 'undefined' && 
+             (window.CrazyGames || window.parent?.CrazyGames || 
+              window.location.hostname.includes('crazygames'));
+    }
+    
+    // Generate guest user ID
+    function generateGuestUserId() {
+      let guestId = localStorage.getItem(GUEST_STORAGE_KEY);
+      if (!guestId) {
+        guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        localStorage.setItem(GUEST_STORAGE_KEY, guestId);
+      }
+      return guestId;
+    }
+    
+    // Initialize authentication
+    async function initializeAuth() {
+      if (isCrazyGamesEnvironment()) {
+        // Try CrazyGames authentication
+        try {
+          const crazyGames = window.CrazyGames || window.parent?.CrazyGames;
+          if (crazyGames && crazyGames.getUser) {
+            const user = await crazyGames.getUser();
+            if (user && user.userId) {
+              currentUser = {
+                uid: user.userId,
+                email: user.email || "",
+                name: user.username || user.displayName || `CrazyUser_${user.userId.slice(0, 8)}`,
+                avatar: user.avatarUrl || user.avatar || "",
+                isCrazyGames: true
+              };
+              authToken = `crazygames-${user.userId}`;
+              return currentUser;
+            }
+          }
+        } catch (err) {
+          console.log('CrazyGames auth failed, falling back to guest:', err);
+        }
+      }
+      
+      // Fall back to guest user
+      const guestId = generateGuestUserId();
+      currentUser = {
+        uid: guestId,
+        email: "",
+        name: `Guest_${guestId.slice(0, 8)}`,
+        isGuest: true
+      };
+      authToken = `guest-${guestId}`;
+      return currentUser;
+    }
 
     let authMode = "signup";
     let gameStarted = false;
     let desiredUsername = "";
-    let authToken = "";
     let shopQuery = "";
     let serverConfigServerId = "";
     let serverConfigServerName = "";
     let serverConfigBusy = false;
-    const SESSION_HINT_KEY = "glb_firebase_session_hint";
+    const SESSION_HINT_KEY = "glb_session_hint";
 
     const multiplayer = {
       playerId: "",
@@ -4622,14 +4667,41 @@
     async function apiJsonAuth(url, method = "GET", body = null, forceRefresh = false) {
       let token = await getAuthToken(!!forceRefresh);
       if (!token) throw new Error("Not authenticated");
+      
+      // Prepare headers for new authentication system
+      const headers = {};
+      if (currentUser?.isCrazyGames) {
+        // Send CrazyGames user info in header
+        headers["x-crazygames-user"] = JSON.stringify({
+          userId: currentUser.uid,
+          username: currentUser.name,
+          email: currentUser.email,
+          avatar: currentUser.avatar
+        });
+      }
+      headers["x-player-id"] = currentUser.uid;
+      headers["x-auth-token"] = token;
+      
       try {
-        return await apiJson(url, method, body, token, { "x-auth-token": token });
+        return await apiJson(url, method, body, token, headers);
       } catch (err) {
         if (Number(err?.status || 0) !== 401) throw err;
         authToken = "";
         token = await getAuthToken(true);
-        if (!token) throw new Error("Session expired. Please log in again.");
-        return apiJson(url, method, body, token, { "x-auth-token": token });
+        if (!token) throw new Error("Session expired. Please reconnect.");
+        // Retry with refreshed token
+        const retryHeaders = {};
+        if (currentUser?.isCrazyGames) {
+          retryHeaders["x-crazygames-user"] = JSON.stringify({
+            userId: currentUser.uid,
+            username: currentUser.name,
+            email: currentUser.email,
+            avatar: currentUser.avatar
+          });
+        }
+        retryHeaders["x-player-id"] = currentUser.uid;
+        retryHeaders["x-auth-token"] = token;
+        return apiJson(url, method, body, token, retryHeaders);
       }
     }
 
@@ -5361,12 +5433,14 @@
     }
 
     function setAuthMode(mode) {
-      authMode = mode === "login" ? "login" : "signup";
-      const signup = authMode === "signup";
-      authTabSignupEl.classList.toggle("active", signup);
-      authTabLoginEl.classList.toggle("active", !signup);
-      authUsernameEl.style.display = signup ? "block" : "none";
-      authSubmitEl.textContent = signup ? "Create Account" : "Log In";
+      // Simplified auth mode - just connect button
+      authMode = "connect";
+      if (authTabSignupEl) authTabSignupEl.style.display = "none";
+      if (authTabLoginEl) authTabLoginEl.style.display = "none";
+      if (authUsernameEl) authUsernameEl.style.display = "none";
+      if (authEmailEl) authEmailEl.style.display = "none";
+      if (authPasswordEl) authPasswordEl.style.display = "none";
+      if (authSubmitEl) authSubmitEl.textContent = "Connect to Game";
       setAuthMessage("");
     }
 
@@ -5384,17 +5458,10 @@
 
     async function getAuthToken(forceRefresh = false) {
       if (!forceRefresh && authToken) return authToken;
-      try {
-        const user = auth.currentUser;
-        if (!user) {
-          authToken = "";
-          return "";
-        }
-        authToken = String(await user.getIdToken(!!forceRefresh));
-      } catch {
-        authToken = "";
+      if (!currentUser) {
+        currentUser = await initializeAuth();
       }
-      return authToken;
+      return authToken || "";
     }
 
     async function syncProfileToken(user, username = "") {
@@ -5420,55 +5487,20 @@
     }
 
     async function submitAuth() {
-      const email = authEmailEl.value.trim();
-      const password = authPasswordEl.value;
-      const username = authUsernameEl.value.trim();
-      if (!email || !password) {
-        setAuthMessage("Enter email and password.");
-        return;
-      }
-      if (authMode === "signup" && username.length < 3) {
-        setAuthMessage("Username must be at least 3 characters.");
-        return;
-      }
-
+      // New authentication system - no email/password needed
       authSubmitEl.disabled = true;
-      setAuthMessage(authMode === "signup" ? "Creating account..." : "Logging in...", true);
+      setAuthMessage("Connecting...", true);
       try {
-        if (authMode === "signup") {
-          try {
-            const check = await apiJson(`/api/auth/username/check?username=${encodeURIComponent(username)}`);
-            if (!check?.available) {
-              setAuthMessage("That username is already taken. Pick a new one.");
-              return;
-            }
-          } catch (checkErr) {
-            setAuthMessage(String(checkErr?.payload?.error || checkErr?.message || "Username check failed."));
-            return;
-          }
-          const name = username.slice(0, 24);
-          const cred = await createUserWithEmailAndPassword(auth, email, password);
-          if (name) {
-            try {
-              await updateProfile(cred.user, { displayName: name });
-            } catch {
-              // noop
-            }
-          }
-          try { localStorage.setItem(SESSION_HINT_KEY, "1"); } catch {}
-          const user = auth.currentUser || cred.user;
-          desiredUsername = username;
-          await syncProfileToken({ email: user?.email || "", uid: user?.uid || "" }, username);
+        currentUser = await initializeAuth();
+        if (currentUser) {
+          setAuthMessage("Success!", true);
+          await refreshAuthState();
         } else {
-          const cred = await signInWithEmailAndPassword(auth, email, password);
-          try { localStorage.setItem(SESSION_HINT_KEY, "1"); } catch {}
-          const user = auth.currentUser || cred.user;
-          await syncProfileToken({ email: user?.email || "", uid: user?.uid || "" }, "");
+          setAuthMessage("Failed to authenticate.");
         }
-        setAuthMessage("Success.", true);
-        await refreshAuthState();
       } catch (err) {
-        setAuthMessage(String(err?.payload?.error || err?.message || "Authentication failed."));
+        setAuthMessage("Authentication failed.");
+        console.error("Auth error:", err);
       } finally {
         authSubmitEl.disabled = false;
       }
@@ -11126,10 +11158,8 @@
     }
 
     function initAuthFlow() {
-      setAuthMode("signup");
-      authTabSignupEl.addEventListener("click", () => setAuthMode("signup"));
-      authTabLoginEl.addEventListener("click", () => setAuthMode("login"));
-      authSubmitEl.addEventListener("click", submitAuth);
+      setAuthMode("connect");
+      if (authSubmitEl) authSubmitEl.addEventListener("click", submitAuth);
       serverRefreshBtn.addEventListener("click", async () => {
         serverRefreshBtn.disabled = true;
         setServerMessage("Refreshing...", true);
@@ -11175,13 +11205,9 @@
         const username = String(btn.dataset.username || "").trim();
         if (username) void removeWhitelistUsernameFromUi(username);
       });
-      [authEmailEl, authPasswordEl, authUsernameEl].forEach((el) => {
-        el.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") submitAuth();
-        });
-      });
-      onAuthStateChanged(auth, () => {
-        authToken = "";
+      // Simplified authentication - no form fields needed
+      // Initialize authentication on load
+      initializeAuth().then(() => {
         refreshAuthState();
       });
       refreshAuthState();
@@ -11189,17 +11215,16 @@
 
     async function refreshAuthState() {
       try {
-        const user = auth.currentUser;
-        if (!user) throw new Error("no-session");
-        multiplayer.playerId = String(user?.uid || "");
-        const synced = await syncProfileToken({ email: user.email, uid: user.uid }, desiredUsername);
+        if (!currentUser) throw new Error("no-session");
+        multiplayer.playerId = String(currentUser?.uid || "");
+        const synced = await syncProfileToken({ email: currentUser.email, uid: currentUser.uid }, desiredUsername);
         if (!synced?.profile?.username && desiredUsername) {
           multiplayer.profile.username = desiredUsername;
         }
-        if (!multiplayer.profile.username && user?.displayName) {
-          multiplayer.profile.username = String(user.displayName).slice(0, 24);
+        if (!multiplayer.profile.username && currentUser?.name) {
+          multiplayer.profile.username = String(currentUser.name).slice(0, 24);
         }
-        multiplayer.profile.email = multiplayer.profile.email || String(user.email || "");
+        multiplayer.profile.email = multiplayer.profile.email || String(currentUser.email || "");
         desiredUsername = "";
         multiplayer.serverSearchQuery = "";
         serverSearchEl.value = "";
@@ -11209,8 +11234,9 @@
         await loadServers();
         setServerMessage("Select a server to play.");
       } catch {
-        try { localStorage.removeItem(SESSION_HINT_KEY); } catch {}
+        try { localStorage.removeItem(GUEST_STORAGE_KEY); } catch {}
         authToken = "";
+        currentUser = null;
         multiplayer.profile = { username: "", email: "" };
         multiplayer.isAdmin = false;
         multiplayer.chatMessages = [];

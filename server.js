@@ -1,17 +1,13 @@
 const http = require("http");
 const express = require("express");
 const { randomUUID } = require("crypto");
-const { admin, db, hasFirebaseConfig, firebaseProjectId } = require("./firebase");
+const { supabase, hasSupabaseConfig, supabaseUrl } = require("./supabase.js");
 const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = Number(process.env.PORT || 3000);
-const PLAYERS_COLLECTION_ID = process.env.FIREBASE_PLAYERS_COLLECTION_ID || "players";
-const TRADES_COLLECTION_ID = process.env.FIREBASE_TRADES_COLLECTION_ID || "trades";
-const CHAT_COLLECTION_ID = process.env.FIREBASE_CHAT_COLLECTION_ID || "chat";
-const SERVERS_COLLECTION_ID = process.env.FIREBASE_SERVERS_COLLECTION_ID || "servers";
-const PLAYERS_BLOB_FIELD = process.env.FIREBASE_PLAYERS_BLOB_FIELD || "profile";
+const PLAYERS_TABLE_ID = process.env.SUPABASE_PLAYERS_TABLE_ID || "player_data";
 
-// Player data caching system to reduce Firebase operations
+// Player data caching system to reduce Supabase operations
 const playerDataCache = new Map(); // playerId -> { data, lastSaveTime, dirty }
 const BATCH_SAVE_INTERVAL_MS = 30000; // 30 seconds
 const DIRTY_PLAYERS = new Set(); // Track which players need saving
@@ -27,14 +23,14 @@ async function batchSaveDirtyPlayers() {
   const playersToSave = Array.from(DIRTY_PLAYERS);
   DIRTY_PLAYERS.clear();
   
-  console.log(`[Batch Save] Saving ${playersToSave.length} players to Firebase`);
+  console.log(`[Batch Save] Saving ${playersToSave.length} players to Supabase`);
   
   const savePromises = playersToSave.map(async (playerId) => {
     const cacheEntry = playerDataCache.get(playerId);
     if (!cacheEntry || !cacheEntry.dirty) return;
     
     try {
-      await setPlayerDocMerge(playerId, cacheEntry.data, null);
+      await savePlayerDataToSupabase(playerId, cacheEntry.data);
       cacheEntry.dirty = false;
       cacheEntry.lastSaveTime = Date.now();
     } catch (err) {
@@ -79,7 +75,7 @@ async function savePlayerDataImmediate(playerId) {
     cacheEntry.dirty = false;
     cacheEntry.lastSaveTime = Date.now();
     DIRTY_PLAYERS.delete(playerId);
-    console.log(`[Immediate Save] Saved player ${playerId} to Firebase`);
+    console.log(`[Immediate Save] Saved player ${playerId} to Supabase`);
   } catch (err) {
     console.error(`[Immediate Save] Failed to save player ${playerId}:`, err?.message || err);
   }
@@ -923,9 +919,7 @@ const serverStates = new Map();
 const resetSaveLocks = new Map();
 const playerCache = new Map();
 const dailyClaimLocks = new Set();
-let firestoreBackoffUntil = 0;
-const FIRESTORE_TIMEOUT_MS = 12000;
-const FIRESTORE_BACKOFF_MS = 10000;
+// Firebase constants removed - now using Supabase
 let leaderboardCashCache = { rows: [], updatedAt: 0 };
 let leaderboardCashInFlight = false;
 
@@ -1005,23 +999,25 @@ function deepClone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
-function isFirestoreBackoff() {
-  return Date.now() < firestoreBackoffUntil;
-}
-
-function isFirestoreTransientError(err) {
+function isSupabaseTransientError(err) {
   if (!err) return false;
   const code = Number(err.code);
   const msg = String(err.message || "").toLowerCase();
-  return code === 8
-    || code === 4
-    || code === 429
-    || code === 503
-    || msg.includes("resource_exhausted")
-    || msg.includes("quota exceeded")
-    || msg.includes("deadline")
+  return code === 503
+    || code === 'PGRST301' // connection timeout
+    || code === 'PGRST302' // connection error
     || msg.includes("timeout")
-    || msg.includes("rate limit");
+    || msg.includes("unavailable")
+    || msg.includes("connection")
+    || msg.includes("network");
+}
+
+function parsePlayerDocAny(raw) {
+  // Direct data parsing for Supabase
+  if (raw && typeof raw === "object") {
+    return raw;
+  }
+  return {};
 }
 
 function setPathValue(target, path, value) {
@@ -1041,122 +1037,7 @@ function mergePatch(base, patch) {
   return out;
 }
 
-function isDatastoreNotFound(err) {
-  return Number(err?.code) === 404
-    || Number(err?.code) === 5
-    || String(err?.type || "").includes("not_found")
-    || String(err?.message || "").toLowerCase().includes("no document to update");
-}
-
-function isDatastoreAuthError(err) {
-  const code = Number(err?.code);
-  const msg = String(err?.message || "").toLowerCase();
-  return code === 401
-    || code === 403
-    || code === 7
-    || msg.includes("unauthorized")
-    || msg.includes("forbidden")
-    || msg.includes("missing scope");
-}
-
-function sanitizeDocData(obj) {
-  const out = deepClone(obj || {}) || {};
-  delete out.$id;
-  delete out.$collectionId;
-  delete out.$databaseId;
-  delete out.$permissions;
-  delete out.$createdAt;
-  delete out.$updatedAt;
-  return out;
-}
-
-async function getDocumentById(collectionId, documentId, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const snap = await db.collection(collectionId).doc(documentId).get();
-    if (!snap.exists) {
-      const e = new Error("not_found");
-      e.code = 404;
-      throw e;
-    }
-    return { $id: snap.id, ...sanitizeDocData(snap.data() || {}) };
-  });
-}
-
-async function listDocuments(collectionId, queries = [], actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    let q = db.collection(collectionId);
-    let limitN = 100;
-    for (const entry of Array.isArray(queries) ? queries : []) {
-      if (!entry || typeof entry !== "object") continue;
-      if (entry.op === "equal") {
-        q = q.where(String(entry.field || ""), "==", entry.value);
-      } else if (entry.op === "limit") {
-        const n = Number(entry.value || 0);
-        if (Number.isFinite(n) && n > 0) limitN = Math.floor(n);
-      }
-    }
-    const snap = await q.limit(limitN).get();
-    return {
-      documents: snap.docs.map((d) => ({ $id: d.id, ...sanitizeDocData(d.data() || {}) }))
-    };
-  });
-}
-
-async function createDocument(collectionId, documentId, data, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const payload = sanitizeDocData(data);
-    await db.collection(collectionId).doc(documentId).set(payload, { merge: false });
-    return { $id: documentId, ...payload };
-  });
-}
-
-async function updateDocument(collectionId, documentId, data, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const payload = sanitizeDocData(data);
-    const ref = db.collection(collectionId).doc(documentId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      const e = new Error("not_found");
-      e.code = 404;
-      throw e;
-    }
-    await ref.set(payload, { merge: true });
-    return { $id: documentId, ...payload };
-  });
-}
-
-async function deleteDocument(collectionId, documentId, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    await db.collection(collectionId).doc(documentId).delete();
-    return { ok: true };
-  });
-}
-
-async function datastoreCall(op) {
-  try {
-    return await Promise.race([
-      op(),
-      new Promise((_, reject) => {
-        setTimeout(() => {
-          const e = new Error("datastore-timeout");
-          e.code = 4;
-          reject(e);
-        }, FIRESTORE_TIMEOUT_MS);
-      })
-    ]);
-  } catch (err) {
-    if (isFirestoreTransientError(err)) {
-      firestoreBackoffUntil = Date.now() + FIRESTORE_BACKOFF_MS;
-      err.firestoreTransient = true;
-    }
-    throw err;
-  }
-}
+// Firebase helper functions removed - now using Supabase directly
 
 async function getPlayerDoc(playerId, actor = null) {
   try {
@@ -1166,96 +1047,104 @@ async function getPlayerDoc(playerId, actor = null) {
       return cachedData;
     }
     
-    // Load from Firebase if not in cache
-    const doc = await getDocumentById(PLAYERS_COLLECTION_ID, playerId, actor);
-    if (!doc) {
+    // Load from Supabase if not in cache
+    if (!supabase) {
+      console.error("Supabase client not initialized");
+      return null;
+    }
+    
+    const { data, error } = await supabase
+      .from(PLAYERS_TABLE_ID)
+      .select('data')
+      .eq('user_id', playerId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error("getPlayerDoc Supabase error:", error);
+      return null;
+    }
+    
+    if (!data) {
       playerCache.delete(playerId);
       return null;
     }
     
     // Process and cache the data
-    const data = sanitizeDocData(doc);
-    if (typeof data[PLAYERS_BLOB_FIELD] === "string") {
-      try {
-        const parsed = JSON.parse(data[PLAYERS_BLOB_FIELD]);
-        if (parsed && typeof parsed === "object") {
-          playerCache.set(playerId, deepClone(parsed));
-          cachePlayerData(playerId, parsed); // Add to new cache
-          return parsed;
-        }
-      } catch {
-        // keep raw doc mode
-      }
+    const playerData = data.data;
+    if (playerData && typeof playerData === "object") {
+      playerCache.set(playerId, deepClone(playerData));
+      cachePlayerData(playerId, playerData); // Add to new cache
+      return playerData;
     }
-    playerCache.set(playerId, deepClone(data));
-    cachePlayerData(playerId, data); // Add to new cache
-    return data;
+    
+    return null;
   } catch (err) {
-    if (isDatastoreNotFound(err)) {
-      playerCache.delete(playerId);
-      return null;
-    }
-    if (isDatastoreAuthError(err)) {
-      console.error("getPlayerDoc auth error (check APPWRITE key + collection permissions):", err?.message || err);
-      return deepClone(playerCache.get(playerId) || null);
-    }
-    if (err.firestoreTransient) return deepClone(playerCache.get(playerId) || null);
-    console.error("getPlayerDoc degraded read:", err?.message || err);
+    console.error("getPlayerDoc error:", err?.message || err);
     return deepClone(playerCache.get(playerId) || null);
   }
 }
 
 async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
-  const strict = !!(opts && opts.strict);
   const prev = playerCache.get(playerId) || {};
   const merged = mergePatch(prev, patch);
-  try {
-    if (JSON.stringify(prev) === JSON.stringify(merged)) {
-      return merged;
-    }
-  } catch {
-    // fallback to write path when serialization check fails
-  }
+  
+  // Cache the merged data
   playerCache.set(playerId, merged);
+  
+  // Save to Supabase
   try {
-    try {
-      await updateDocument(PLAYERS_COLLECTION_ID, playerId, merged, actor);
-    } catch (err) {
-      if (isDatastoreNotFound(err)) {
-        await createDocument(PLAYERS_COLLECTION_ID, playerId, merged, actor);
-      } else {
-        throw err;
-      }
-    }
+    await savePlayerDataToSupabase(playerId, merged);
   } catch (err) {
-    // Fallback for strict Appwrite schemas: store full player object in one text column.
-    try {
-      const blobPayload = { [PLAYERS_BLOB_FIELD]: JSON.stringify(merged) };
-      try {
-        await updateDocument(PLAYERS_COLLECTION_ID, playerId, blobPayload, actor);
-      } catch (err2) {
-        if (isDatastoreNotFound(err2)) {
-          await createDocument(PLAYERS_COLLECTION_ID, playerId, blobPayload, actor);
-        } else {
-          throw err2;
-        }
-      }
-    } catch (blobErr) {
-      if (strict) throw blobErr;
-      console.error("setPlayerDocMerge degraded write", blobErr?.message || blobErr);
-      // Keep gameplay alive even if Appwrite schema/permissions are not ready.
+    console.error("setPlayerDocMerge error:", err?.message || err);
+    if (opts && opts.strict) {
+      throw err;
     }
   }
+  
   return merged;
 }
 
 async function deletePlayerDoc(playerId, actor = null) {
   playerCache.delete(playerId);
   try {
-    await deleteDocument(PLAYERS_COLLECTION_ID, playerId, actor);
+    if (!supabase) {
+      console.error("Supabase client not initialized");
+      return;
+    }
+    
+    const { error } = await supabase
+      .from(PLAYERS_TABLE_ID)
+      .delete()
+      .eq('user_id', playerId);
+    
+    if (error) {
+      console.error("deletePlayerDoc Supabase error:", error);
+    }
   } catch (err) {
-    if (isDatastoreNotFound(err)) return;
-    console.error("deletePlayerDoc degraded delete", err?.message || err);
+    console.error("deletePlayerDoc error:", err?.message || err);
+  }
+}
+
+// Save player data to Supabase
+async function savePlayerDataToSupabase(playerId, data) {
+  if (!supabase) {
+    console.error("Supabase client not initialized");
+    return;
+  }
+  
+  const { error } = await supabase
+    .from(PLAYERS_TABLE_ID)
+    .upsert({
+      user_id: playerId,
+      data: data,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id'
+    });
+  
+  if (error) {
+    console.error("savePlayerDataToSupabase error:", error);
+    throw error;
   }
 }
 
@@ -1331,73 +1220,62 @@ app.use(express.static(__dirname));
 
 async function verifyAuth(req, res, opts = {}) {
   const strict = opts.strict !== false;
-  const authHeader = String(req.headers.authorization || "").trim();
-  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-  const tokenFromBearer = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
-  const tokenFromXHeader = String(req.headers["x-auth-token"] || "").trim();
-  const tokenFromBody = String(req.body?.authToken || "").trim();
-  const tokenFromQuery = String(req.query?.authToken || "").trim();
-  const token = tokenFromBearer || tokenFromXHeader || tokenFromBody || tokenFromQuery;
-  if (!token) {
-    if (strict) res.status(401).json({ error: "missing token" });
-    return null;
-  }
-  function decodeJwtPayload(jwt) {
+  
+  // Check for CrazyGames user in headers (common pattern for CrazyGames SDK)
+  const crazyGamesUser = req.headers['x-crazygames-user'];
+  const playerId = req.headers['x-player-id'] || req.body?.playerId || req.query?.playerId;
+  
+  // Handle CrazyGames authenticated user
+  if (crazyGamesUser) {
     try {
-      const parts = String(jwt).split(".");
-      if (parts.length < 2) return null;
-      const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-      const json = Buffer.from(padded, "base64").toString("utf8");
-      const payload = JSON.parse(json);
-      return payload && typeof payload === "object" ? payload : null;
-    } catch {
-      return null;
+      const user = typeof crazyGamesUser === 'string' ? JSON.parse(crazyGamesUser) : crazyGamesUser;
+      if (user && user.userId) {
+        return {
+          uid: String(user.userId),
+          email: String(user.email || ""),
+          name: String(user.username || user.displayName || user.name || ""),
+          avatar: String(user.avatarUrl || user.avatar || ""),
+          isCrazyGames: true,
+          token: `crazygames-${user.userId}`
+        };
+      }
+    } catch (err) {
+      console.error("Failed to parse CrazyGames user:", err);
     }
   }
-  try {
-    if (admin?.auth && token) {
-      const decoded = await admin.auth().verifyIdToken(token);
+  
+  // Handle guest users (local UUID)
+  if (playerId) {
+    // Generate a guest ID if it looks like a UUID or is provided directly
+    const guestId = String(playerId).trim();
+    if (guestId.length > 0) {
       return {
-        uid: String(decoded.uid || decoded.user_id || ""),
-        email: String(decoded.email || ""),
-        name: String(decoded.name || ""),
-        token
+        uid: guestId,
+        email: "",
+        name: `Guest_${guestId.slice(0, 8)}`,
+        isGuest: true,
+        token: `guest-${guestId}`
       };
     }
-  } catch (err) {
-    // fall through to permissive fallback below
-    if (strict && String(err?.message || "").toLowerCase().includes("invalid")) {
-      // continue to fallback
-    }
   }
-  try {
-    const payload = decodeJwtPayload(token);
-    const uid = String(
-      payload?.uid
-      || payload?.user_id
-      || payload?.userId
-      || payload?.sub
-      || req.body?.playerId
-      || req.query?.playerId
-      || ""
-    ).trim();
-    if (uid) {
-      return {
-        uid,
-        email: String(payload?.email || ""),
-        name: String(payload?.name || ""),
-        unverified: true,
-        token
-      };
-    }
-    if (strict) res.status(401).json({ error: "invalid token" });
-    return null;
-  } catch (err) {
-    if (strict) res.status(401).json({ error: "invalid token" });
-    console.error("verifyAuth failed", err?.message || err);
+  
+  // Generate guest ID as fallback
+  const generatedGuestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  if (strict) {
+    res.status(401).json({ 
+      error: "authentication required",
+      guestId: generatedGuestId
+    });
     return null;
   }
+  
+  return {
+    uid: generatedGuestId,
+    email: "",
+    name: `Guest_${generatedGuestId.slice(0, 8)}`,
+    isGuest: true,
+    token: `guest-${generatedGuestId}`
+  };
 }
 
 function firstFreeSlot(serverState) {
@@ -2044,7 +1922,7 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
     }
 
     owner.data.pedestals = pedestals;
-    // Cache the data instead of immediate Firebase write
+    // Cache the data instead of immediate Supabase write
     cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     serverState.activeSnapshots.set(ownerId, buildWorldSnapshot(owner.data || {}));
     if (restoredPedestalIndex !== sourceIdx) unlockRecentlyStolenPedestal(serverState, ownerId, sourceIdx);
@@ -2137,7 +2015,7 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
   }
 
   thiefDoc.data.pedestals = pedestals;
-  // Cache the data instead of immediate Firebase write
+  // Cache the data instead of immediate Supabase write
   cachePlayerData(thief, { data: thiefDoc.data, updatedAt: Date.now() });
   serverState.activeSnapshots.set(thief, buildWorldSnapshot(thiefDoc.data || {}));
   serverState.carriedByThief.delete(thief);
@@ -2277,7 +2155,7 @@ async function completeSteal(serverState, steal) {
     }
 
     owner.data.pedestals = ownerPedestals;
-    // Cache the data instead of immediate Firebase write
+    // Cache the data instead of immediate Supabase write
     cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     lockRecentlyStolenPedestal(serverState, ownerId, pedIndex, {
       mode: "stolen",
@@ -2465,33 +2343,34 @@ async function findPlayerIdByUsername(usernameRaw) {
   const wantedKey = usernameKey(usernameRaw);
   if (!wantedKey || wantedKey.length < 3) return "";
 
+  // Check cache first
   for (const [pid, cached] of playerCache.entries()) {
     const key = usernameKey(cached?.profile?.username || "");
     if (key === wantedKey) return String(pid);
   }
 
+  // Query Supabase
+  if (!supabase) return "";
+  
   try {
-    const snap = await db.collection(PLAYERS_COLLECTION_ID)
-      .where("profile.usernameLower", "==", wantedKey)
-      .limit(1)
-      .get();
-    const doc = snap.docs?.[0];
-    if (doc?.id) return String(doc.id);
-  } catch {
-    // fallback scan below
-  }
-
-  try {
-    const snap = await db.collection(PLAYERS_COLLECTION_ID).limit(3000).get();
-    for (const d of snap.docs || []) {
-      const pid = String(d.id || "");
-      if (!pid) continue;
-      const parsed = ensurePlayerDataShape(parsePlayerDocAny(d.data() || {}), 0);
-      if (usernameKey(parsed?.profile?.username || "") === wantedKey) return pid;
+    const { data, error } = await supabase
+      .from(PLAYERS_TABLE_ID)
+      .select('user_id, data')
+      .eq('data->>profile->>usernameLower', wantedKey)
+      .limit(1);
+    
+    if (error) {
+      console.error("findPlayerIdByUsername Supabase error:", error);
+      return "";
     }
-  } catch {
-    // noop
+    
+    if (data && data.length > 0) {
+      return String(data[0].user_id);
+    }
+  } catch (err) {
+    console.error("findPlayerIdByUsername error:", err);
   }
+  
   return "";
 }
 
@@ -2523,20 +2402,37 @@ function removeWhitelistUsername(serverState, username) {
 }
 
 async function computeCashLeaderboard(limit = 10) {
-  const snap = await db.collection(PLAYERS_COLLECTION_ID).limit(1500).get();
-  const rows = [];
-  for (const d of snap.docs || []) {
-    const playerId = String(d.id || "");
-    if (!playerId) continue;
-    const playerDoc = ensurePlayerDataShape(parsePlayerDocAny(d.data() || {}), 0);
-    rows.push({
-      playerId,
-      username: getUsernameFromPlayerDoc(playerDoc, playerId),
-      money: getMoneyFromPlayerDoc(playerDoc)
-    });
+  if (!supabase) return [];
+  
+  try {
+    const { data, error } = await supabase
+      .from(PLAYERS_TABLE_ID)
+      .select('user_id, data')
+      .limit(1500);
+    
+    if (error) {
+      console.error("computeCashLeaderboard Supabase error:", error);
+      return [];
+    }
+    
+    const rows = [];
+    for (const d of data || []) {
+      const playerId = String(d.user_id || "");
+      if (!playerId) continue;
+      const playerDoc = ensurePlayerDataShape(d.data || {}, 0);
+      rows.push({
+        playerId,
+        username: getUsernameFromPlayerDoc(playerDoc, playerId),
+        money: getMoneyFromPlayerDoc(playerDoc)
+      });
+    }
+    
+    rows.sort((a, b) => Number(b.money || 0) - Number(a.money || 0));
+    return rows.slice(0, Math.max(1, Math.min(50, Number(limit) || 10)));
+  } catch (err) {
+    console.error("computeCashLeaderboard error:", err);
+    return [];
   }
-  rows.sort((a, b) => Number(b.money || 0) - Number(a.money || 0));
-  return rows.slice(0, Math.max(1, Math.min(50, Number(limit) || 10)));
 }
 
 async function getCashLeaderboardCached(limit = 10) {
@@ -2613,7 +2509,7 @@ app.post("/api/auth/profile", async (req, res) => {
       profilePatch.usernameLower = usernameKey(currentUsername);
     }
 
-    // Cache the profile data instead of immediate Firebase write
+    // Cache the profile data instead of immediate Supabase write
     cachePlayerData(uid, { profile: profilePatch, updatedAt: Date.now() });
     const profile = profilePatch;
 
@@ -2678,7 +2574,7 @@ app.post("/api/servers/create", async (req, res) => {
       return;
     }
     profile.data.state.stardust = stardustNow - PRIVATE_SERVER_CREATE_STARDUST_COST;
-    // Cache the data instead of immediate Firebase write
+    // Cache the data instead of immediate Supabase write
     cachePlayerData(playerId, { data: profile.data, updatedAt: Date.now() });
     const id = `srv-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
     const state = ensureServerState(id, {
@@ -2984,7 +2880,7 @@ app.post("/api/save", async (req, res) => {
     }
     const safeData = ensurePlayerDataShape({ data: guardedData }, slot).data;
     
-    // Cache the data instead of immediate Firebase write
+    // Cache the data instead of immediate Supabase write
     cachePlayerData(playerId, {
       slot,
       data: safeData,
@@ -3000,7 +2896,7 @@ app.post("/api/save", async (req, res) => {
     res.json({ ok: true, batched: true }); // Indicate it's batched
   } catch (err) {
     console.error("/api/save failed", err);
-    if (err && err.firestoreTransient) {
+    if (err && err.supabaseTransient) {
       res.json({ ok: true, degraded: true });
       return;
     }
@@ -3063,7 +2959,7 @@ app.post("/api/daily/claim", async (req, res) => {
       addLuckyByRank(player.data.state, luckyRankKey, luckyAmount);
     }
 
-    // Cache the data instead of immediate Firebase write
+    // Cache the data instead of immediate Supabase write
     cachePlayerData(playerId, {
       data: player.data,
       daily: player.daily,
@@ -3088,7 +2984,7 @@ app.post("/api/daily/claim", async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("/api/daily/claim failed", err);
-    if (err && err.firestoreTransient) {
+    if (err && err.supabaseTransient) {
       res.json({ granted: false, degraded: true });
       return;
     }
@@ -4478,9 +4374,9 @@ setInterval(() => {
 loadPersistedServers().finally(() => {
   server.listen(PORT, () => {
     console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
-    console.log(`[Firebase] project=${firebaseProjectId || "unset"} configured=${hasFirebaseConfig ? "yes" : "no"}`);
-    console.log(`[Firebase] collections(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID}, servers=${SERVERS_COLLECTION_ID})`);
-    console.log(`[Batch Save] Enabled - saving to Firebase every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
+    console.log(`[Supabase] url=${supabaseUrl || "unset"} configured=${hasSupabaseConfig ? "yes" : "no"}`);
+    console.log(`[Supabase] table=${PLAYERS_TABLE_ID} for player data persistence`);
+    console.log(`[Batch Save] Enabled - saving to Supabase every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
   });
 });
 
