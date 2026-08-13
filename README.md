@@ -2,6 +2,11 @@
 
 A polished, cinematic multiplayer 3D game with server-authoritative architecture and Neon PostgreSQL database backend.
 
+## Live Deployments
+
+- **API Server**: https://growluckyblocks-tfpd.onrender.com
+- **Game Client**: https://playgrowlb.onrender.com
+
 ## Project Structure
 
 ```
