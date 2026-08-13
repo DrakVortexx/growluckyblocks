@@ -6,11 +6,10 @@ A polished, cinematic multiplayer 3D game with server-authoritative architecture
 
 ```
 growluckyblocks-main/
-├── client/          # React + Three.js client application
-├── server/          # Node.js + TypeScript server
-├── shared/          # Shared TypeScript types and constants
-├── database/        # PostgreSQL schema and migrations
-└── assets/          # Game assets (blocks, creatures)
+├── client/          # React + Three.js client application (static site)
+├── server/          # Node.js server (web service)
+├── assets/          # Game assets (blocks, creatures)
+└── README.md        # This file
 ```
 
 ## Features
@@ -85,7 +84,8 @@ ADMIN_USERNAME=DrakVortexx
 ### 5. Run Database Migrations
 
 ```bash
-# From project root
+# From server directory
+cd server
 psql $DATABASE_URL -f database/schema.sql
 psql $DATABASE_URL -f database/seed.sql
 ```
@@ -156,7 +156,7 @@ The database uses a simplified relational schema with 13 tables:
 - Removing unused cosmetics and achievements tables
 - Removing chat messages (handled via WebSocket)
 
-See `database/schema.sql` for the complete schema.
+See `server/database/schema.sql` for the complete schema.
 
 ## API Endpoints
 
