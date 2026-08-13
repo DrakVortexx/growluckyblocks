@@ -41,54 +41,20 @@ psql $DATABASE_URL -f database/seed.sql
 
 ## Schema Overview
 
-### Core Tables
+Three tables:
 
-- **users**: User accounts and authentication
-- **player_profiles**: Game progression data
-- **player_settings**: User preferences
+- **players**: Account (username + password hash), admin flag, and all game progression stored as JSONB in `data`
+- **servers**: Private servers with owner and whitelist access
+- **chat_messages**: Per-server chat history
 
-### Multiplayer Tables
-
-- **servers**: Server instances
-- **server_whitelist**: Private server access
-- **server_players**: Active player sessions
-
-### Game Objects
-
-- **bases**: Player bases per server
-- **farm_plots**: Seed growing plots
-- **pedestals**: Block/creature placement
-- **lucky_blocks**: Lucky block inventory and placement
-- **creatures**: Income-generating creatures
-
-### Economy & Inventory
-
-- **inventory_items**: General inventory
-- **lucky_block_inventory**: Lucky block counts by rarity
-- **special_lucky_inventory**: Special blocks (valentines, leprechaun, etc.)
-- **lucky_trait_inventory**: Trait-modified blocks
-- **blue_moon_inventory**: Blue moon variants
-- **soulbound_inventory**: Soulbound items
-- **combat_equipment**: Bats and combat tools
-- **transactions**: Economy audit log
-
-### Social & Events
-
-- **steals**: Stealing event tracking
-- **daily_rewards**: Daily reward tracking
-- **rebirths**: Rebirth history
-- **cosmetics**: Cosmetic items
-- **achievements**: Achievement progress
-- **chat_messages**: Server chat history
+Public servers (`public-1`..`public-3`) live in server memory and are not stored in the database.
 
 ## Migration Notes
 
 The schema includes:
-- UUID primary keys for most tables
-- Automatic `updated_at` timestamps via triggers
+- UUID primary key for players (`gen_random_uuid()`, built into PostgreSQL 13+ / Neon)
 - Foreign key constraints with appropriate CASCADE behavior
 - Performance indexes for common queries
-- Check constraints for data validation
 
 ## Backups
 

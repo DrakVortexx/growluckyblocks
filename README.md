@@ -24,7 +24,7 @@ growluckyblocks-main/
 - **Database**: PostgreSQL (Neon) for persistent data
 - **Gameplay**: Lucky blocks, creatures, stealing, base locking, economy
 - **Cinematic Graphics**: Three.js 3D rendering with visual effects
-- **Authentication**: JWT-based auth with CrazyGames and guest support
+- **Authentication**: Username + password accounts with JWT tokens (no email required)
 
 ## Prerequisites
 
@@ -74,10 +74,6 @@ JWT_SECRET=your-secret-key-change-in-production
 # Server Configuration
 PORT=3000
 NODE_ENV=development
-
-# Admin Configuration
-ADMIN_EMAIL=naturebenji@gmail.com
-ADMIN_USERNAME=DrakVortexx
 ```
 
 ### 4. Set Up Neon PostgreSQL
@@ -118,10 +114,6 @@ The client will start on `http://localhost:5173`
 ### Building for Production
 
 ```bash
-# Build server
-cd server
-npm run build
-
 # Build client
 cd client
 npm run build
@@ -129,57 +121,30 @@ npm run build
 
 ## Database Schema
 
-The database uses a simplified relational schema with 13 tables:
+The database uses a simple three-table schema:
 
-### Core Tables
-- **users**: User accounts and authentication (JWT-based)
-- **player_profiles**: Game progression data (money, stardust, seeds, rebirths)
-- **player_settings**: User preferences (graphics, audio, controls)
+- **players**: Account (username + password hash), admin flag, and all game progression stored as JSONB
+- **servers**: Private servers with owner and whitelist access
+- **chat_messages**: Per-server chat history
 
-### Multiplayer Tables
-- **servers**: Multiplayer server instances
-- **server_whitelist**: Private server access control
-- **server_players**: Active player sessions
-
-### Gameplay Tables
-- **bases**: Player bases per server
-- **pedestals**: Block/creature placement (60 pedestals per base, 6 floors)
-- **lucky_blocks**: Lucky block inventory and placement
-- **creatures**: Income-generating creatures
-
-### Economy Tables
-- **inventory_items**: Unified inventory system (replaces 5 separate inventory tables)
-- **transactions**: Economy audit log
-- **steals**: Stealing event tracking
-- **daily_rewards**: Daily reward tracking
-
-**Schema Reduction**: Reduced from 23 tables to 13 tables by:
-- Merging 5 duplicate inventory tables into one `inventory_items` table
-- Removing obsolete combat equipment table
-- Removing unused farm plots table
-- Removing rebirths history (stored in profile)
-- Removing unused cosmetics and achievements tables
-- Removing chat messages (handled via WebSocket)
+Public servers (`public-1`..`public-3`) live in server memory and are not stored in the database. Trading has been removed for now.
 
 See `server/database/schema.sql` for the complete schema.
 
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/signup` - Register new user
-- `POST /api/auth/login` - Login user (returns JWT token)
+- `POST /api/auth/signup` - Register with username + password (returns JWT token)
+- `POST /api/auth/login` - Login with username + password (returns JWT token)
+- `GET /api/auth/me` - Get current account (JWT required)
 
 ### Servers
-- `GET /api/servers` - List all servers
-- `POST /api/servers/create` - Create new server
-- `GET /api/servers/:id` - Get server details
-
-### Players
-- `GET /api/player/me` - Get current player data
-- `POST /api/player/profile` - Update player profile
+- `POST /api/play` - Join a randomized public server (JWT required)
+- `GET /api/servers` - List private servers you own or are whitelisted on (JWT required)
+- `POST /api/servers/create` - Create a private server (JWT required)
 
 ### WebSocket
-- `WS /ws?playerId=<id>&serverId=<id>` - Real-time game connection
+- `WS /ws?token=<jwt>&serverId=<id>` - Real-time game connection
 
 ## Game Mechanics
 
@@ -210,25 +175,7 @@ See `server/database/schema.sql` for the complete schema.
 
 ### Economy
 - Currencies: Money, Stardust, Seeds
-- Server-authoritative transactions
-- All changes logged for audit
-- Unified inventory system
-
-## Migration from Old Save Data
-
-A migration layer is provided to convert existing save data to the new schema.
-
-```bash
-cd server
-npx tsx src/migrations/migrate-local-save.ts
-```
-
-The migration:
-- Reads legacy player data
-- Validates and converts to new format
-- Creates user/profile records
-- Imports currencies, inventory, creatures
-- Is idempotent (safe to run multiple times)
+- Server-authoritative game logic
 
 ## Admin Operations
 
@@ -286,4 +233,3 @@ This project is private and proprietary.
 
 - Original game: DrakVortexx
 - Rebuild architecture: Server-authoritative multiplayer with Neon PostgreSQL
-- Simplified schema: Reduced from 23 to 13 tables for better performance

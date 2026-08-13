@@ -5,7 +5,7 @@ services:
     env: node
     plan: free
     rootDir: server
-    buildCommand: "npm install --include=dev && npm run build"
+    buildCommand: "npm install"
     startCommand: "npm start"
     healthCheckPath: /health
     autoDeploy: true
@@ -20,10 +20,6 @@ services:
         sync: false  # Set in Render dashboard (Neon PostgreSQL)
       - key: JWT_SECRET
         sync: false  # Set in Render dashboard
-      - key: ADMIN_EMAIL
-        value: naturebenji@gmail.com
-      - key: ADMIN_USERNAME
-        value: DrakVortexx
 
 # Configuration for deploying to Render.com
 # Instructions:

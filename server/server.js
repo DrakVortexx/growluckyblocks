@@ -1,13 +1,16 @@
 const http = require("http");
+const path = require("path");
 const express = require("express");
-const { randomUUID } = require("crypto");
-const { supabase, supabaseAuth, hasSupabaseConfig, supabaseUrl } = require("./supabase.js");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { query, initDb, hasDb } = require("./db.js");
 const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = Number(process.env.PORT || 3000);
-const PLAYERS_TABLE_ID = process.env.SUPABASE_PLAYERS_TABLE_ID || "player_data";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+const JWT_EXPIRES_IN = "30d";
 
-// Player data caching system to reduce Supabase operations
+// Player data caching system to reduce database operations
 const playerDataCache = new Map(); // playerId -> { data, lastSaveTime, dirty }
 const BATCH_SAVE_INTERVAL_MS = 30000; // 30 seconds
 const DIRTY_PLAYERS = new Set(); // Track which players need saving
@@ -23,14 +26,14 @@ async function batchSaveDirtyPlayers() {
   const playersToSave = Array.from(DIRTY_PLAYERS);
   DIRTY_PLAYERS.clear();
   
-  console.log(`[Batch Save] Saving ${playersToSave.length} players to Supabase`);
+  console.log(`[Batch Save] Saving ${playersToSave.length} players to database`);
   
   const savePromises = playersToSave.map(async (playerId) => {
     const cacheEntry = playerDataCache.get(playerId);
     if (!cacheEntry || !cacheEntry.dirty) return;
     
     try {
-      await savePlayerDataToSupabase(playerId, cacheEntry.data);
+      await savePlayerDataToDb(playerId, cacheEntry.data);
       cacheEntry.dirty = false;
       cacheEntry.lastSaveTime = Date.now();
     } catch (err) {
@@ -75,19 +78,17 @@ async function savePlayerDataImmediate(playerId) {
     cacheEntry.dirty = false;
     cacheEntry.lastSaveTime = Date.now();
     DIRTY_PLAYERS.delete(playerId);
-    console.log(`[Immediate Save] Saved player ${playerId} to Supabase`);
   } catch (err) {
     console.error(`[Immediate Save] Failed to save player ${playerId}:`, err?.message || err);
   }
 }
-const Query = {
-  equal: (field, value) => ({ op: "equal", field, value }),
-  limit: (n) => ({ op: "limit", value: Number(n) || 0 })
-};
-const ID = { unique: () => randomUUID() };
-const ADMIN_EMAIL = "naturebenji@gmail.com";
 const ADMIN_USERNAME = "DrakVortexx";
 const DEFAULT_SERVER_ID = "public-1";
+const PUBLIC_SERVER_DEFS = [
+  { id: "public-1", name: "Public #1" },
+  { id: "public-2", name: "Public #2" },
+  { id: "public-3", name: "Public #3" }
+];
 const RANK_KEYS = new Set([
   "basic", "common", "rare", "epic", "legendary",
   "mythic", "godly", "secret", "transcendent", "omniversal"
@@ -144,7 +145,6 @@ const MAX_BASE_FLOORS = 6;
 const MAX_REBIRTHS = 10;
 const PERSONAL_LUCK_MAX = 1000;
 const MAX_SERVER_SLOTS = 8;
-const PRIVATE_SERVER_CREATE_STARDUST_COST = 25;
 const SPAWN_DROP_CENTER = Object.freeze({ x: -10.5, z: 6.1 });
 const TREADMILL_SPAWN_START = Object.freeze({ x: 15.8, z: -6.4 });
 const TREADMILL_SPAWN_END = Object.freeze({ x: 15.8, z: 6.4 });
@@ -546,8 +546,7 @@ function addCreatureToData(playerData, creature) {
 
 function isAdminProfile(profile) {
   if (!profile || typeof profile !== "object") return false;
-  return String(profile.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase()
-    && String(profile.username || "") === ADMIN_USERNAME;
+  return usernameKey(profile.username || "") === usernameKey(ADMIN_USERNAME);
 }
 
 function cleanServerId(v) {
@@ -919,7 +918,7 @@ const serverStates = new Map();
 const resetSaveLocks = new Map();
 const playerCache = new Map();
 const dailyClaimLocks = new Set();
-// Firebase constants removed - now using Supabase
+
 let leaderboardCashCache = { rows: [], updatedAt: 0 };
 let leaderboardCashInFlight = false;
 
@@ -960,7 +959,20 @@ function ensureServerState(serverId, opts = {}) {
   return state;
 }
 
-ensureServerState(DEFAULT_SERVER_ID, { name: "Public #1", isPrivate: false, ownerUsername: "System" });
+for (const def of PUBLIC_SERVER_DEFS) {
+  ensureServerState(def.id, { name: def.name, isPrivate: false, ownerUsername: "System" });
+}
+
+function pickRandomPublicServer() {
+  const candidates = [];
+  for (const def of PUBLIC_SERVER_DEFS) {
+    const state = ensureServerState(def.id, { name: def.name, isPrivate: false, ownerUsername: "System" });
+    pruneDisconnectedSlots(state);
+    if (state.activeSlots.size < MAX_SERVER_SLOTS) candidates.push(state);
+  }
+  if (candidates.length === 0) return ensureServerState(DEFAULT_SERVER_ID, {});
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
 
 function canAccessServer(state, playerId) {
   if (!state) return false;
@@ -999,27 +1011,6 @@ function deepClone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
-function isSupabaseTransientError(err) {
-  if (!err) return false;
-  const code = Number(err.code);
-  const msg = String(err.message || "").toLowerCase();
-  return code === 503
-    || code === 'PGRST301' // connection timeout
-    || code === 'PGRST302' // connection error
-    || msg.includes("timeout")
-    || msg.includes("unavailable")
-    || msg.includes("connection")
-    || msg.includes("network");
-}
-
-function parsePlayerDocAny(raw) {
-  // Direct data parsing for Supabase
-  if (raw && typeof raw === "object") {
-    return raw;
-  }
-  return {};
-}
-
 function setPathValue(target, path, value) {
   const parts = String(path).split(".");
   let node = target;
@@ -1037,46 +1028,28 @@ function mergePatch(base, patch) {
   return out;
 }
 
-// Firebase helper functions removed - now using Supabase directly
-
 async function getPlayerDoc(playerId, actor = null) {
   try {
-    // Check new cache first
     const cachedData = getCachedPlayerData(playerId);
     if (cachedData) {
       return cachedData;
     }
-    
-    // Load from Supabase if not in cache
-    if (!supabase) {
-      console.error("Supabase client not initialized");
-      return null;
-    }
-    
-    const { data, error } = await supabase
-      .from(PLAYERS_TABLE_ID)
-      .select('data')
-      .eq('user_id', playerId)
-      .single();
-    
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error("getPlayerDoc Supabase error:", error);
-      return null;
-    }
-    
-    if (!data) {
+
+    if (!hasDb) return null;
+
+    const result = await query("SELECT data FROM players WHERE id = $1", [String(playerId)]);
+    if (result.rows.length === 0) {
       playerCache.delete(playerId);
       return null;
     }
-    
-    // Process and cache the data
-    const playerData = data.data;
+
+    const playerData = result.rows[0].data;
     if (playerData && typeof playerData === "object") {
       playerCache.set(playerId, deepClone(playerData));
-      cachePlayerData(playerId, playerData); // Add to new cache
+      cachePlayerData(playerId, playerData);
       return playerData;
     }
-    
+
     return null;
   } catch (err) {
     console.error("getPlayerDoc error:", err?.message || err);
@@ -1091,9 +1064,8 @@ async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
   // Cache the merged data
   playerCache.set(playerId, merged);
   
-  // Save to Supabase
   try {
-    await savePlayerDataToSupabase(playerId, merged);
+    await savePlayerDataToDb(playerId, merged);
   } catch (err) {
     console.error("setPlayerDocMerge error:", err?.message || err);
     if (opts && opts.strict) {
@@ -1106,46 +1078,22 @@ async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
 
 async function deletePlayerDoc(playerId, actor = null) {
   playerCache.delete(playerId);
+  playerDataCache.delete(playerId);
+  DIRTY_PLAYERS.delete(playerId);
   try {
-    if (!supabase) {
-      console.error("Supabase client not initialized");
-      return;
-    }
-    
-    const { error } = await supabase
-      .from(PLAYERS_TABLE_ID)
-      .delete()
-      .eq('user_id', playerId);
-    
-    if (error) {
-      console.error("deletePlayerDoc Supabase error:", error);
-    }
+    if (!hasDb) return;
+    await query("UPDATE players SET data = '{}', updated_at = NOW() WHERE id = $1", [String(playerId)]);
   } catch (err) {
     console.error("deletePlayerDoc error:", err?.message || err);
   }
 }
 
-// Save player data to Supabase
-async function savePlayerDataToSupabase(playerId, data) {
-  if (!supabase) {
-    console.error("Supabase client not initialized");
-    return;
-  }
-  
-  const { error } = await supabase
-    .from(PLAYERS_TABLE_ID)
-    .upsert({
-      user_id: playerId,
-      data: data,
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: 'user_id'
-    });
-  
-  if (error) {
-    console.error("savePlayerDataToSupabase error:", error);
-    throw error;
-  }
+async function savePlayerDataToDb(playerId, data) {
+  if (!hasDb) return;
+  await query(
+    "UPDATE players SET data = $2, updated_at = NOW(), last_seen_at = NOW() WHERE id = $1",
+    [String(playerId), JSON.stringify(data || {})]
+  );
 }
 
 function serverStateToDoc(state) {
@@ -1165,32 +1113,64 @@ function serverStateToDoc(state) {
   };
 }
 
+function isPublicServerId(id) {
+  return PUBLIC_SERVER_DEFS.some((def) => def.id === String(id || ""));
+}
+
 async function saveServerStateDoc(state) {
-  if (!state || String(state.id || "") === DEFAULT_SERVER_ID) return;
+  if (!state || isPublicServerId(state.id)) return;
   const doc = serverStateToDoc(state);
   if (!doc || !doc.id) return;
+  if (!hasDb) return;
   try {
-    try {
-      await updateDocument(SERVERS_COLLECTION_ID, doc.id, doc, null);
-    } catch (err) {
-      if (isDatastoreNotFound(err)) {
-        await createDocument(SERVERS_COLLECTION_ID, doc.id, doc, null);
-      } else {
-        throw err;
-      }
-    }
+    await query(
+      `INSERT INTO servers (id, name, description, owner_id, owner_username, is_private, allow_others_server_luck, whitelist_player_ids, whitelist_usernames, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         description = EXCLUDED.description,
+         owner_username = EXCLUDED.owner_username,
+         is_private = EXCLUDED.is_private,
+         allow_others_server_luck = EXCLUDED.allow_others_server_luck,
+         whitelist_player_ids = EXCLUDED.whitelist_player_ids,
+         whitelist_usernames = EXCLUDED.whitelist_usernames,
+         updated_at = NOW()`,
+      [
+        doc.id,
+        doc.name,
+        doc.description,
+        doc.ownerId || null,
+        doc.ownerUsername,
+        doc.isPrivate,
+        doc.allowOthersServerLuck,
+        JSON.stringify(doc.whitelistPlayerIds),
+        JSON.stringify(doc.whitelistUsernames)
+      ]
+    );
   } catch (err) {
     console.error("saveServerStateDoc degraded write", err?.message || err);
   }
 }
 
 async function loadPersistedServers() {
+  if (!hasDb) return;
   try {
-    const snap = await listDocuments(SERVERS_COLLECTION_ID, [Query.limit(400)], null);
-    for (const rawDoc of (snap.documents || [])) {
-      const doc = sanitizeDocData(rawDoc || {});
-      const id = cleanServerId(doc.id || rawDoc?.$id || "");
-      if (!id || id === DEFAULT_SERVER_ID) continue;
+    const result = await query("SELECT * FROM servers LIMIT 400");
+    for (const row of result.rows) {
+      const doc = {
+        id: row.id,
+        name: row.name,
+        ownerId: row.owner_id ? String(row.owner_id) : "",
+        ownerUsername: row.owner_username || "",
+        isPrivate: !!row.is_private,
+        description: row.description || "",
+        allowOthersServerLuck: row.allow_others_server_luck !== false,
+        whitelistPlayerIds: Array.isArray(row.whitelist_player_ids) ? row.whitelist_player_ids : [],
+        whitelistUsernames: Array.isArray(row.whitelist_usernames) ? row.whitelist_usernames : [],
+        createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
+      };
+      const id = cleanServerId(doc.id || "");
+      if (!id || isPublicServerId(id)) continue;
       const state = ensureServerState(id, {
         name: cleanServerName(doc.name || "Garden Server"),
         ownerId: String(doc.ownerId || ""),
@@ -1216,88 +1196,51 @@ async function loadPersistedServers() {
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, "..", "client")));
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+function signAuthToken(player) {
+  return jwt.sign(
+    { sub: String(player.id), username: String(player.username || "") },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
+
+function decodeAuthToken(token) {
+  try {
+    const payload = jwt.verify(String(token || ""), JWT_SECRET);
+    const uid = String(payload.sub || "").trim();
+    if (!uid) return null;
+    return {
+      uid,
+      name: String(payload.username || ""),
+      isAdmin: usernameKey(payload.username || "") === usernameKey(ADMIN_USERNAME),
+      token: String(token)
+    };
+  } catch {
+    return null;
+  }
+}
 
 async function verifyAuth(req, res, opts = {}) {
   const strict = opts.strict !== false;
-  
-  // Check for Supabase JWT token (email/password auth)
+
   const authHeader = String(req.headers.authorization || "").trim();
   const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-  const supabaseToken = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
-  
-  if (supabaseToken && supabaseToken.startsWith('eyJ')) {
-    try {
-      const { data: { user }, error } = await supabaseAuth.auth.getUser(supabaseToken);
-      if (!error && user) {
-        return {
-          uid: String(user.id),
-          email: String(user.email || ""),
-          name: String(user.user_metadata?.username || user.email?.split('@')[0] || ""),
-          isSupabaseAuth: true,
-          token: supabaseToken
-        };
-      }
-    } catch (err) {
-      console.error("Failed to verify Supabase token:", err);
-    }
-  }
-  
-  // Check for CrazyGames user in headers (common pattern for CrazyGames SDK)
-  const crazyGamesUser = req.headers['x-crazygames-user'];
-  const playerId = req.headers['x-player-id'] || req.body?.playerId || req.query?.playerId;
-  
-  // Handle CrazyGames authenticated user
-  if (crazyGamesUser) {
-    try {
-      const user = typeof crazyGamesUser === 'string' ? JSON.parse(crazyGamesUser) : crazyGamesUser;
-      if (user && user.userId) {
-        return {
-          uid: String(user.userId),
-          email: String(user.email || ""),
-          name: String(user.username || user.displayName || user.name || ""),
-          avatar: String(user.avatarUrl || user.avatar || ""),
-          isCrazyGames: true,
-          token: `crazygames-${user.userId}`
-        };
-      }
-    } catch (err) {
-      console.error("Failed to parse CrazyGames user:", err);
-    }
-  }
-  
-  // Handle guest users (local UUID)
-  if (playerId) {
-    // Generate a guest ID if it looks like a UUID or is provided directly
-    const guestId = String(playerId).trim();
-    if (guestId.length > 0) {
-      return {
-        uid: guestId,
-        email: "",
-        name: `Guest_${guestId.slice(0, 8)}`,
-        isGuest: true,
-        token: `guest-${guestId}`
-      };
-    }
-  }
-  
-  // Generate guest ID as fallback
-  const generatedGuestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const token = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
+
+  const decoded = token ? decodeAuthToken(token) : null;
+  if (decoded) return decoded;
+
   if (strict) {
-    res.status(401).json({ 
-      error: "authentication required",
-      guestId: generatedGuestId
-    });
+    res.status(401).json({ error: "authentication required" });
     return null;
   }
-  
-  return {
-    uid: generatedGuestId,
-    email: "",
-    name: `Guest_${generatedGuestId.slice(0, 8)}`,
-    isGuest: true,
-    token: `guest-${generatedGuestId}`
-  };
+  return null;
 }
 
 function firstFreeSlot(serverState) {
@@ -1944,7 +1887,7 @@ async function returnCarriedToOwner(serverState, thiefId, reason = "hit", byPlay
     }
 
     owner.data.pedestals = pedestals;
-    // Cache the data instead of immediate Supabase write
+    // Cache the data; batch save flushes to the database
     cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     serverState.activeSnapshots.set(ownerId, buildWorldSnapshot(owner.data || {}));
     if (restoredPedestalIndex !== sourceIdx) unlockRecentlyStolenPedestal(serverState, ownerId, sourceIdx);
@@ -2037,7 +1980,7 @@ async function secureCarriedToThief(serverState, thiefId, pedestalIndex) {
   }
 
   thiefDoc.data.pedestals = pedestals;
-  // Cache the data instead of immediate Supabase write
+  // Cache the data; batch save flushes to the database
   cachePlayerData(thief, { data: thiefDoc.data, updatedAt: Date.now() });
   serverState.activeSnapshots.set(thief, buildWorldSnapshot(thiefDoc.data || {}));
   serverState.carriedByThief.delete(thief);
@@ -2177,7 +2120,7 @@ async function completeSteal(serverState, steal) {
     }
 
     owner.data.pedestals = ownerPedestals;
-    // Cache the data instead of immediate Supabase write
+    // Cache the data; batch save flushes to the database
     cachePlayerData(ownerId, { data: owner.data, updatedAt: Date.now() });
     lockRecentlyStolenPedestal(serverState, ownerId, pedIndex, {
       mode: "stolen",
@@ -2337,19 +2280,6 @@ function isResetLocked(playerId) {
   return true;
 }
 
-function parsePlayerDocAny(raw) {
-  const data = sanitizeDocData(raw || {});
-  if (typeof data[PLAYERS_BLOB_FIELD] === "string") {
-    try {
-      const parsed = JSON.parse(data[PLAYERS_BLOB_FIELD]);
-      if (parsed && typeof parsed === "object") return parsed;
-    } catch {
-      // noop
-    }
-  }
-  return data;
-}
-
 function getMoneyFromPlayerDoc(playerDoc) {
   const v = Number(playerDoc?.data?.state?.money || 0);
   return Number.isFinite(v) ? Math.max(0, v) : 0;
@@ -2371,28 +2301,17 @@ async function findPlayerIdByUsername(usernameRaw) {
     if (key === wantedKey) return String(pid);
   }
 
-  // Query Supabase
-  if (!supabase) return "";
-  
+  if (!hasDb) return "";
+
   try {
-    const { data, error } = await supabase
-      .from(PLAYERS_TABLE_ID)
-      .select('user_id, data')
-      .eq('data->>profile->>usernameLower', wantedKey)
-      .limit(1);
-    
-    if (error) {
-      console.error("findPlayerIdByUsername Supabase error:", error);
-      return "";
-    }
-    
-    if (data && data.length > 0) {
-      return String(data[0].user_id);
+    const result = await query("SELECT id FROM players WHERE username_lower = $1 LIMIT 1", [wantedKey]);
+    if (result.rows.length > 0) {
+      return String(result.rows[0].id);
     }
   } catch (err) {
-    console.error("findPlayerIdByUsername error:", err);
+    console.error("findPlayerIdByUsername error:", err?.message || err);
   }
-  
+
   return "";
 }
 
@@ -2424,35 +2343,26 @@ function removeWhitelistUsername(serverState, username) {
 }
 
 async function computeCashLeaderboard(limit = 10) {
-  if (!supabase) return [];
-  
+  if (!hasDb) return [];
+
   try {
-    const { data, error } = await supabase
-      .from(PLAYERS_TABLE_ID)
-      .select('user_id, data')
-      .limit(1500);
-    
-    if (error) {
-      console.error("computeCashLeaderboard Supabase error:", error);
-      return [];
-    }
-    
+    const result = await query("SELECT id, username, data FROM players LIMIT 1500");
     const rows = [];
-    for (const d of data || []) {
-      const playerId = String(d.user_id || "");
+    for (const d of result.rows) {
+      const playerId = String(d.id || "");
       if (!playerId) continue;
       const playerDoc = ensurePlayerDataShape(d.data || {}, 0);
       rows.push({
         playerId,
-        username: getUsernameFromPlayerDoc(playerDoc, playerId),
+        username: String(d.username || "") || getUsernameFromPlayerDoc(playerDoc, playerId),
         money: getMoneyFromPlayerDoc(playerDoc)
       });
     }
-    
+
     rows.sort((a, b) => Number(b.money || 0) - Number(a.money || 0));
     return rows.slice(0, Math.max(1, Math.min(50, Number(limit) || 10)));
   } catch (err) {
-    console.error("computeCashLeaderboard error:", err);
+    console.error("computeCashLeaderboard error:", err?.message || err);
     return [];
   }
 }
@@ -2476,103 +2386,119 @@ async function getCashLeaderboardCached(limit = 10) {
   }
 }
 
-// Supabase email/password authentication endpoints
+// Username + password authentication endpoints
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { email, password, username } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
-    }
-    
-    if (!username || username.length < 3) {
+    const username = cleanUsername(req.body?.username || "");
+    const password = String(req.body?.password || "");
+
+    if (username.length < 3) {
       return res.status(400).json({ error: "Username must be at least 3 characters" });
     }
-    
-    // Check if username is already taken
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    if (!hasDb) {
+      return res.status(503).json({ error: "Database not configured" });
+    }
+
     const existingUserId = await findPlayerIdByUsername(username);
     if (existingUserId) {
       return res.status(409).json({ error: "Username already taken" });
     }
-    
-    // Create user with Supabase Auth
-    const { data, error } = await supabaseAuth.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username
-        }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const initialData = ensurePlayerDataShape({
+      profile: { username, usernameLower: usernameKey(username), updatedAt: Date.now() }
+    }, 0);
+
+    let row;
+    try {
+      const result = await query(
+        "INSERT INTO players (username, username_lower, password_hash, data) VALUES ($1, $2, $3, $4) RETURNING id, username",
+        [username, usernameKey(username), passwordHash, JSON.stringify(initialData)]
+      );
+      row = result.rows[0];
+    } catch (err) {
+      if (String(err?.code) === "23505") {
+        return res.status(409).json({ error: "Username already taken" });
       }
-    });
-    
-    if (error) {
-      return res.status(400).json({ error: error.message });
+      throw err;
     }
-    
-    res.json({ 
-      ok: true, 
-      message: "Account created successfully",
-      user: {
-        id: data.user?.id,
-        email: data.user?.email,
-        username
-      }
+
+    const token = signAuthToken({ id: row.id, username: row.username });
+    res.json({
+      ok: true,
+      token,
+      user: { id: String(row.id), username: String(row.username) }
     });
   } catch (err) {
-    console.error("Signup error:", err);
+    console.error("Signup error:", err?.message || err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
+    const username = cleanUsername(req.body?.username || "");
+    const password = String(req.body?.password || "");
+
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password required" });
     }
-    
-    // Sign in with Supabase Auth
-    const { data, error } = await supabaseAuth.auth.signInWithPassword({
-      email,
-      password
-    });
-    
-    if (error) {
-      return res.status(401).json({ error: error.message });
+    if (!hasDb) {
+      return res.status(503).json({ error: "Database not configured" });
     }
-    
-    res.json({ 
-      ok: true, 
-      token: data.session?.access_token,
-      user: {
-        id: data.user?.id,
-        email: data.user?.email,
-        username: data.user?.user_metadata?.username || data.user?.email?.split('@')[0]
-      }
+
+    const result = await query(
+      "SELECT id, username, password_hash FROM players WHERE username_lower = $1 LIMIT 1",
+      [usernameKey(username)]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    const passwordOk = await bcrypt.compare(password, String(row.password_hash || ""));
+    if (!passwordOk) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    await query("UPDATE players SET last_seen_at = NOW() WHERE id = $1", [row.id]);
+
+    const token = signAuthToken({ id: row.id, username: row.username });
+    res.json({
+      ok: true,
+      token,
+      user: { id: String(row.id), username: String(row.username) }
     });
   } catch (err) {
-    console.error("Login error:", err);
+    console.error("Login error:", err?.message || err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-app.post("/api/auth/logout", async (req, res) => {
+app.get("/api/auth/me", async (req, res) => {
   try {
-    const authHeader = String(req.headers.authorization || "").trim();
-    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-    const token = tokenMatch ? String(tokenMatch[1] || "").trim() : "";
-    
-    if (token) {
-      await supabaseAuth.auth.signOut();
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    if (hasDb) {
+      const result = await query("SELECT id, username FROM players WHERE id = $1 LIMIT 1", [decoded.uid]);
+      const row = result.rows[0];
+      if (!row) {
+        return res.status(401).json({ error: "account not found" });
+      }
+      return res.json({ ok: true, user: { id: String(row.id), username: String(row.username) } });
     }
-    
-    res.json({ ok: true, message: "Logged out successfully" });
+    res.json({ ok: true, user: { id: decoded.uid, username: decoded.name } });
   } catch (err) {
-    console.error("Logout error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("/api/auth/me failed", err?.message || err);
+    res.status(500).json({ error: "internal error" });
   }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  res.json({ ok: true, message: "Logged out successfully" });
 });
 
 app.get("/api/auth/username/check", async (req, res) => {
@@ -2600,7 +2526,6 @@ app.post("/api/auth/profile", async (req, res) => {
       return;
     }
     const existing = ensurePlayerDataShape(await getPlayerDoc(uid, decoded || null), 0);
-    const email = decoded?.email || String(existing?.profile?.email || "");
     const requestedUsername = cleanUsername(req.body?.username || "");
     const accountName = cleanUsername(decoded?.name || "");
     const currentUsername = cleanUsername(existing?.profile?.username || "");
@@ -2621,7 +2546,8 @@ app.post("/api/auth/profile", async (req, res) => {
       }
     }
 
-    const profilePatch = { ...(existing.profile || {}), email, updatedAt: Date.now() };
+    const profilePatch = { ...(existing.profile || {}), updatedAt: Date.now() };
+    delete profilePatch.email;
     if (desiredUsername) {
       profilePatch.username = desiredUsername;
       profilePatch.usernameLower = usernameKey(desiredUsername);
@@ -2630,7 +2556,7 @@ app.post("/api/auth/profile", async (req, res) => {
       profilePatch.usernameLower = usernameKey(currentUsername);
     }
 
-    // Cache the profile data instead of immediate Supabase write
+    // Cache the profile data; batch save flushes to the database
     cachePlayerData(uid, { profile: profilePatch, updatedAt: Date.now() });
     const profile = profilePatch;
 
@@ -2668,6 +2594,18 @@ app.get("/api/servers", async (req, res) => {
   res.json({ servers });
 });
 
+app.post("/api/play", async (req, res) => {
+  try {
+    const decoded = await verifyAuth(req, res);
+    if (!decoded) return;
+    const state = pickRandomPublicServer();
+    res.json({ ok: true, server: serverTag(state, decoded.uid) });
+  } catch (err) {
+    console.error("/api/play failed", err);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
 app.post("/api/servers/create", async (req, res) => {
   try {
     const decoded = await verifyAuth(req, res);
@@ -2682,27 +2620,13 @@ app.post("/api/servers/create", async (req, res) => {
       return;
     }
     const name = cleanServerName(req.body?.name || "Garden Server");
-    const isPrivate = !!req.body?.isPrivate;
     const profile = ensurePlayerDataShape(await getPlayerDoc(playerId, decoded), 0);
-    if (!profile?.data?.state || typeof profile.data.state !== "object") profile.data = { state: {} };
-    const stardustNow = Number(profile?.data?.state?.stardust || 0);
-    if (!Number.isFinite(stardustNow) || stardustNow < PRIVATE_SERVER_CREATE_STARDUST_COST) {
-      res.status(400).json({
-        error: "not enough stardust",
-        required: PRIVATE_SERVER_CREATE_STARDUST_COST,
-        stardust: Math.max(0, stardustNow || 0)
-      });
-      return;
-    }
-    profile.data.state.stardust = stardustNow - PRIVATE_SERVER_CREATE_STARDUST_COST;
-    // Cache the data instead of immediate Supabase write
-    cachePlayerData(playerId, { data: profile.data, updatedAt: Date.now() });
     const id = `srv-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
     const state = ensureServerState(id, {
       name,
       ownerId: playerId,
-      ownerUsername: cleanUsername(profile?.profile?.username || ""),
-      isPrivate,
+      ownerUsername: cleanUsername(profile?.profile?.username || decoded?.name || ""),
+      isPrivate: true,
       description: "",
       allowOthersServerLuck: true
     });
@@ -2710,9 +2634,7 @@ app.post("/api/servers/create", async (req, res) => {
     res.json({
       ok: true,
       server: serverTag(state, playerId),
-      servers: listServersForPlayer(playerId),
-      stardust: Number(profile.data.state.stardust || 0),
-      createCost: PRIVATE_SERVER_CREATE_STARDUST_COST
+      servers: listServersForPlayer(playerId)
     });
   } catch (err) {
     console.error("/api/servers/create failed", err);
@@ -2895,12 +2817,10 @@ app.post("/api/join", async (req, res) => {
     let profilePatch = null;
     if (incomingProfile) {
       const incomingUsername = String(incomingProfile.username || "").replace(/[^a-zA-Z0-9_ -]/g, "").slice(0, 24);
-      const incomingEmail = String(incomingProfile.email || "");
       if (!existing.profile || !existing.profile.username || incomingUsername) {
         existing.profile = {
           ...(existing.profile || {}),
-          username: incomingUsername || String(existing.profile?.username || "").slice(0, 24),
-          email: incomingEmail || String(existing.profile?.email || "")
+          username: incomingUsername || String(existing.profile?.username || "").slice(0, 24)
         };
         profilePatch = existing.profile;
       }
@@ -2934,7 +2854,6 @@ app.post("/api/join", async (req, res) => {
     const adminFromAuth = decoded
       && String(decoded.uid || "") === playerId
       && isAdminProfile({
-        email: decoded.email || "",
         username: String(decoded.name || existing.profile?.username || "")
       });
 
@@ -3001,7 +2920,7 @@ app.post("/api/save", async (req, res) => {
     }
     const safeData = ensurePlayerDataShape({ data: guardedData }, slot).data;
     
-    // Cache the data instead of immediate Supabase write
+    // Cache the data; batch save flushes to the database
     cachePlayerData(playerId, {
       slot,
       data: safeData,
@@ -3017,7 +2936,7 @@ app.post("/api/save", async (req, res) => {
     res.json({ ok: true, batched: true }); // Indicate it's batched
   } catch (err) {
     console.error("/api/save failed", err);
-    if (err && err.supabaseTransient) {
+    if (err && err.transient) {
       res.json({ ok: true, degraded: true });
       return;
     }
@@ -3080,7 +2999,7 @@ app.post("/api/daily/claim", async (req, res) => {
       addLuckyByRank(player.data.state, luckyRankKey, luckyAmount);
     }
 
-    // Cache the data instead of immediate Supabase write
+    // Cache the data; batch save flushes to the database
     cachePlayerData(playerId, {
       data: player.data,
       daily: player.daily,
@@ -3105,7 +3024,7 @@ app.post("/api/daily/claim", async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("/api/daily/claim failed", err);
-    if (err && err.supabaseTransient) {
+    if (err && err.transient) {
       res.json({ granted: false, degraded: true });
       return;
     }
@@ -3698,24 +3617,6 @@ app.get("/api/leaderboard/cash", async (req, res) => {
   }
 });
 
-app.post("/api/trade/request", async (req, res) => {
-  const decoded = await verifyAuth(req, res);
-  if (!decoded) return;
-  res.status(410).json({ error: "trading has been removed" });
-});
-
-app.get("/api/trade/pending", async (req, res) => {
-  const decoded = await verifyAuth(req, res);
-  if (!decoded) return;
-  res.json({ trades: [], removed: true });
-});
-
-app.post("/api/trade/respond", async (req, res) => {
-  const decoded = await verifyAuth(req, res);
-  if (!decoded) return;
-  res.status(410).json({ error: "trading has been removed" });
-});
-
 app.get("/api/world", (req, res) => {
   const serverId = cleanServerId(req.query?.serverId || DEFAULT_SERVER_ID);
   const serverState = ensureServerState(serverId, {});
@@ -3728,6 +3629,26 @@ app.get("/api/chat/recent", async (req, res) => {
     if (!decoded) return;
     const serverId = cleanServerId(req.query?.serverId || DEFAULT_SERVER_ID);
     const serverState = ensureServerState(serverId, {});
+    if (hasDb) {
+      try {
+        const result = await query(
+          "SELECT player_id, username, text, created_at FROM chat_messages WHERE server_id = $1 ORDER BY created_at DESC LIMIT 60",
+          [serverId]
+        );
+        const messages = result.rows.reverse().map((row) => ({
+          type: "chat-message",
+          serverId,
+          playerId: row.player_id ? String(row.player_id) : "",
+          username: String(row.username || ""),
+          text: String(row.text || ""),
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
+        }));
+        res.json({ messages });
+        return;
+      } catch (err) {
+        console.error("/api/chat/recent db read failed", err?.message || err);
+      }
+    }
     const messages = Array.isArray(serverState.chatMessages)
       ? serverState.chatMessages.slice(-60)
       : [];
@@ -4145,9 +4066,7 @@ async function handleAdminReset(req, res) {
     }
 
     if (!targetPlayerId) {
-      const snap = await listDocuments(PLAYERS_COLLECTION_ID, [Query.limit(500)]);
-      const doc = (snap.documents || []).find((d) => String(d.profile?.username || "") === username);
-      if (doc) targetPlayerId = String(doc.$id || "");
+      targetPlayerId = await findPlayerIdByUsername(username);
     }
     if (!targetPlayerId) {
       res.status(404).json({ error: "target player not found" });
@@ -4363,7 +4282,9 @@ const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const playerId = String(url.searchParams.get("playerId") || "").trim();
+  const token = String(url.searchParams.get("token") || "").trim();
+  const decoded = token ? decodeAuthToken(token) : null;
+  const playerId = decoded ? String(decoded.uid || "").trim() : "";
   const serverId = cleanServerId(url.searchParams.get("serverId") || DEFAULT_SERVER_ID);
   if (!playerId) {
     ws.close();
@@ -4442,6 +4363,14 @@ wss.on("connection", (ws, req) => {
       if (serverState.chatMessages.length > 120) {
         serverState.chatMessages = serverState.chatMessages.slice(-120);
       }
+      if (hasDb) {
+        query(
+          "INSERT INTO chat_messages (server_id, player_id, username, text) VALUES ($1, $2, $3, $4)",
+          [serverId, playerId, username, text]
+        ).catch((err) => {
+          console.error("chat persist failed", err?.message || err);
+        });
+      }
       const out = JSON.stringify(payload);
       for (const client of serverState.socketsByPlayer.values()) {
         if (client.readyState === WebSocket.OPEN) client.send(out);
@@ -4492,14 +4421,18 @@ setInterval(() => {
   }
 }, 1000);
 
-loadPersistedServers().finally(() => {
-  server.listen(PORT, () => {
-    console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
-    console.log(`[Supabase] url=${supabaseUrl || "unset"} configured=${hasSupabaseConfig ? "yes" : "no"}`);
-    console.log(`[Supabase] table=${PLAYERS_TABLE_ID} for player data persistence`);
-    console.log(`[Batch Save] Enabled - saving to Supabase every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
+initDb()
+  .catch((err) => {
+    console.error("[DB] init failed", err?.message || err);
+  })
+  .then(() => loadPersistedServers())
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`Grow Lucky Blocks server listening on http://localhost:${PORT}`);
+      console.log(`[DB] configured=${hasDb ? "yes" : "no"}`);
+      console.log(`[Batch Save] Enabled - saving every ${BATCH_SAVE_INTERVAL_MS / 1000} seconds or on player disconnect`);
+    });
   });
-});
 
 // Graceful shutdown handler
 process.on('SIGTERM', async () => {

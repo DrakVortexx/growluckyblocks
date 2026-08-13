@@ -1059,33 +1059,38 @@
     }
 
     .authCard {
-      width: min(470px, calc(100vw - 24px));
-      border-radius: 16px;
+      width: min(560px, calc(100vw - 24px));
+      border-radius: 20px;
       border: 1px solid var(--line);
-      background: rgba(10, 18, 29, 0.88);
+      background: rgba(10, 18, 29, 0.9);
       box-shadow: 0 30px 65px rgba(0, 0, 0, 0.42);
-      padding: 20px;
+      padding: 34px 32px;
       color: #e6f9ff;
       backdrop-filter: blur(8px);
+      text-align: center;
     }
 
     .authTitle {
       font-weight: 900;
-      font-size: 28px;
-      letter-spacing: 0.6px;
-      margin-bottom: 3px;
+      font-size: 40px;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+      background: linear-gradient(180deg, #9fe6ff, #4aa8ec);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .authSub {
       color: #b4d7eb;
-      font-size: 13px;
-      margin-bottom: 14px;
+      font-size: 15px;
+      margin-bottom: 22px;
     }
 
     .authTabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 10px;
+      margin-bottom: 18px;
     }
 
     .authTab {
@@ -1093,9 +1098,10 @@
       border: 1px solid var(--line);
       background: rgba(29, 45, 64, 0.85);
       color: #e9fbff;
-      border-radius: 9px;
-      padding: 9px 10px;
+      border-radius: 11px;
+      padding: 13px 12px;
       font-weight: 800;
+      font-size: 16px;
       cursor: pointer;
     }
 
@@ -1109,9 +1115,10 @@
       border: 1px solid var(--line);
       background: rgba(8, 16, 24, 0.82);
       color: #f4ffff;
-      border-radius: 9px;
-      padding: 10px 11px;
-      margin-bottom: 9px;
+      border-radius: 11px;
+      padding: 15px 16px;
+      font-size: 16px;
+      margin-bottom: 12px;
       outline: none;
     }
 
@@ -1134,21 +1141,84 @@
     #authSubmit {
       width: 100%;
       border: 1px solid rgba(255, 255, 255, 0.26);
-      border-radius: 9px;
+      border-radius: 11px;
       background: linear-gradient(180deg, #58df6a, #1cae33);
       color: #fff;
       font-weight: 900;
-      padding: 11px 12px;
+      font-size: 18px;
+      padding: 15px 16px;
       cursor: pointer;
-      margin-top: 2px;
+      margin-top: 4px;
     }
 
     #authMessage {
       min-height: 18px;
-      margin-top: 9px;
-      font-size: 12px;
+      margin-top: 12px;
+      font-size: 13px;
       color: #ffd7d7;
     }
+
+    .dashCard { text-align: left; }
+
+    .dashHeader {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    #dashLogoutBtn {
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 9px;
+      background: linear-gradient(180deg, #ff8a9a, #cf4b5e);
+      color: #fff;
+      font-weight: 800;
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+
+    .dashMain {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    #dashPlayBtn {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #58df6a, #1cae33);
+      color: #fff;
+      font-weight: 900;
+      font-size: 26px;
+      padding: 20px 16px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      box-shadow: 0 10px 26px rgba(28, 174, 51, 0.35);
+    }
+
+    #dashPlayBtn:hover { filter: brightness(1.08); }
+
+    #dashServersBtn {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #65d2ff, #2d84c8);
+      color: #fff;
+      font-weight: 800;
+      font-size: 17px;
+      padding: 13px 14px;
+      cursor: pointer;
+    }
+
+    #serversPanel {
+      display: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.16);
+      padding-top: 12px;
+    }
+
+    #serversPanel.show { display: block; }
 
     #broadcastBanner {
       position: fixed;
@@ -1666,34 +1736,39 @@
   <div id="authGate" class="show">
     <div class="authCard">
       <div class="authTitle">Grow Lucky Blocks</div>
-      <div class="authSub">Sign up or log in to save progress, username, and multiplayer data.</div>
+      <div class="authSub">Create an account or log in with your username and password.</div>
       <div class="authTabs">
         <button id="authTabSignup" class="authTab active">Sign Up</button>
         <button id="authTabLogin" class="authTab">Log In</button>
       </div>
-      <input id="authUsername" class="authField" placeholder="Username" maxlength="24" />
-      <input id="authEmail" class="authField" placeholder="Email" type="email" />
-      <input id="authPassword" class="authField" placeholder="Password (6+ chars)" type="password" />
-      <label class="authCheckRow"><input id="authRemember" type="checkbox" checked /> Remember me on this device</label>
+      <input id="authUsername" class="authField" placeholder="Username" maxlength="24" autocomplete="username" />
+      <input id="authPassword" class="authField" placeholder="Password (6+ chars)" type="password" autocomplete="current-password" />
       <button id="authSubmit">Create Account</button>
       <div id="authMessage"></div>
     </div>
   </div>
   <div id="serverGate">
-    <div class="serverCard">
-      <div class="serverTitle">Choose Server</div>
-      <div class="serverSub">Join an existing server or create your own. Player count updates in real time while players are online. Creating a server costs 💫 25 Stardust.</div>
-      <input id="serverSearch" placeholder="Search by server name, id, or owner" maxlength="40" style="width:100%;margin-bottom:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:9px 10px;outline:none" />
-      <div id="serverRows"></div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-        <button id="playOfflineBtn" style="background:linear-gradient(180deg,#ff6b35,#d84315);color:white;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer">🎮 Play Offline</button>
+    <div class="serverCard dashCard">
+      <div class="dashHeader">
+        <div>
+          <div class="serverTitle">Grow Lucky Blocks</div>
+          <div class="serverSub" id="dashWelcome">Welcome back!</div>
+        </div>
+        <button id="dashLogoutBtn">Log Out</button>
       </div>
+      <div class="dashMain">
+        <button id="dashPlayBtn">▶ Play</button>
+        <button id="dashServersBtn">🌐 Servers</button>
+      </div>
+      <div id="serversPanel">
+        <div class="serverSub">Join a private server you own or are invited to, or create your own.</div>
+        <input id="serverSearch" placeholder="Search by server name, id, or owner" maxlength="40" style="width:100%;margin-bottom:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(8,16,24,0.85);color:#f2ffff;border-radius:8px;padding:9px 10px;outline:none" />
+        <div id="serverRows"></div>
       <div class="serverCreate">
-        <input id="serverName" placeholder="New server name" maxlength="28" />
-        <label class="authCheckRow" style="margin:0"><input id="serverPrivate" type="checkbox" /> Private</label>
+        <input id="serverName" placeholder="New private server name" maxlength="28" />
         <div style="display:flex;gap:6px">
           <button id="serverRefreshBtn">Refresh</button>
-          <button id="serverCreateBtn">Create</button>
+          <button id="serverCreateBtn">Create Private Server</button>
         </div>
       </div>
       <div id="serverConfigPanel">
@@ -1709,6 +1784,7 @@
         </div>
         <div id="serverWhitelistList"></div>
         <div id="serverConfigMsg"></div>
+      </div>
       </div>
       <div id="serverMsg"></div>
     </div>
@@ -2066,7 +2142,6 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
     import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
-    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
     const RANKS = [
       { key: "basic", label: "Basic", min: 1, max: 3, weight: 50, color: "c-basic" },
@@ -2258,11 +2333,14 @@
     const serverRowsEl = document.getElementById("serverRows");
     const serverSearchEl = document.getElementById("serverSearch");
     const serverNameEl = document.getElementById("serverName");
-    const serverPrivateEl = document.getElementById("serverPrivate");
     const serverRefreshBtn = document.getElementById("serverRefreshBtn");
     const serverCreateBtn = document.getElementById("serverCreateBtn");
-    const playOfflineBtn = document.getElementById("playOfflineBtn");
     const serverMsgEl = document.getElementById("serverMsg");
+    const dashPlayBtnEl = document.getElementById("dashPlayBtn");
+    const dashServersBtnEl = document.getElementById("dashServersBtn");
+    const dashLogoutBtnEl = document.getElementById("dashLogoutBtn");
+    const dashWelcomeEl = document.getElementById("dashWelcome");
+    const serversPanelEl = document.getElementById("serversPanel");
     const serverConfigPanelEl = document.getElementById("serverConfigPanel");
     const serverConfigTitleEl = document.getElementById("serverConfigTitle");
     const serverWhitelistInputEl = document.getElementById("serverWhitelistInput");
@@ -2275,9 +2353,7 @@
     const authTabSignupEl = document.getElementById("authTabSignup");
     const authTabLoginEl = document.getElementById("authTabLogin");
     const authUsernameEl = document.getElementById("authUsername");
-    const authEmailEl = document.getElementById("authEmail");
     const authPasswordEl = document.getElementById("authPassword");
-    const authRememberEl = document.getElementById("authRemember");
     const authSubmitEl = document.getElementById("authSubmit");
     const authMessageEl = document.getElementById("authMessage");
     const chatPanelEl = document.getElementById("chatPanel");
@@ -2370,142 +2446,27 @@
       return !!(coarse || touch || uaMobile || narrowTouch);
     })();
     const REMOTE_FIELD_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x7a5d3a });
-    // Enhanced Authentication System - Supports Supabase, CrazyGames, and Guest
+    // Authentication - username + password accounts with JWT tokens.
+    // No auto-login: players must explicitly sign up or log in each visit.
     let currentUser = null;
     let authToken = null;
-    let supabaseClient = null;
-    const GUEST_STORAGE_KEY = "glb_guest_user_id";
-    const SUPABASE_TOKEN_KEY = "glb_supabase_token";
-    
-    // Check for CrazyGames SDK
-    function isCrazyGamesEnvironment() {
-      return typeof window !== 'undefined' && 
-             (window.CrazyGames || window.parent?.CrazyGames || 
-              window.location.hostname.includes('crazygames'));
+
+    async function signUp(username, password) {
+      return apiJson("/api/auth/signup", "POST", { username, password });
     }
-    
-    // Initialize Supabase client for frontend
-    function initializeSupabaseClient() {
-      if (supabaseClient) return supabaseClient;
-      
-      // Use environment variables or fallback
-      const supabaseUrl = window.SUPABASE_URL || 'https://your-project.supabase.co';
-      const supabaseAnonKey = window.SUPABASE_ANON_KEY || 'your-anon-key';
-      
-      supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true
-        }
-      });
-      
-      return supabaseClient;
+
+    async function signIn(username, password) {
+      return apiJson("/api/auth/login", "POST", { username, password });
     }
-    
-    // Generate guest user ID
-    function generateGuestUserId() {
-      let guestId = localStorage.getItem(GUEST_STORAGE_KEY);
-      if (!guestId) {
-        guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        localStorage.setItem(GUEST_STORAGE_KEY, guestId);
-      }
-      return guestId;
-    }
-    
-    // Initialize authentication
-    async function initializeAuth() {
-      // First check for existing Supabase session
-      const savedToken = localStorage.getItem(SUPABASE_TOKEN_KEY);
-      if (savedToken && !isCrazyGamesEnvironment()) {
-        try {
-          const supabase = initializeSupabaseClient();
-          const { data: { session }, error } = await supabase.auth.getSession();
-          
-          if (session && !error) {
-            currentUser = {
-              uid: session.user.id,
-              email: session.user.email || "",
-              name: session.user.user_metadata?.username || session.user.email?.split('@')[0] || "",
-              isSupabaseAuth: true
-            };
-            authToken = session.access_token;
-            localStorage.setItem(SUPABASE_TOKEN_KEY, session.access_token);
-            return currentUser;
-          }
-        } catch (err) {
-          console.log('Supabase session check failed:', err);
-          localStorage.removeItem(SUPABASE_TOKEN_KEY);
-        }
-      }
-      
-      // Try CrazyGames authentication
-      if (isCrazyGamesEnvironment()) {
-        try {
-          const crazyGames = window.CrazyGames || window.parent?.CrazyGames;
-          if (crazyGames && crazyGames.getUser) {
-            const user = await crazyGames.getUser();
-            if (user && user.userId) {
-              currentUser = {
-                uid: user.userId,
-                email: user.email || "",
-                name: user.username || user.displayName || `CrazyUser_${user.userId.slice(0, 8)}`,
-                avatar: user.avatarUrl || user.avatar || "",
-                isCrazyGames: true
-              };
-              authToken = `crazygames-${user.userId}`;
-              return currentUser;
-            }
-          }
-        } catch (err) {
-          console.log('CrazyGames auth failed, falling back to guest:', err);
-        }
-      }
-      
-      // Fall back to guest user
-      const guestId = generateGuestUserId();
-      currentUser = {
-        uid: guestId,
-        email: "",
-        name: `Guest_${guestId.slice(0, 8)}`,
-        isGuest: true
-      };
-      authToken = `guest-${guestId}`;
-      return currentUser;
-    }
-    
-    // Supabase authentication functions
-    async function signUpWithEmail(email, password, username) {
-      try {
-        const response = await apiJson("/api/auth/signup", "POST", { email, password, username });
-        return response;
-      } catch (err) {
-        throw err;
-      }
-    }
-    
-    async function signInWithEmail(email, password) {
-      try {
-        const response = await apiJson("/api/auth/login", "POST", { email, password });
-        if (response.ok && response.token) {
-          localStorage.setItem(SUPABASE_TOKEN_KEY, response.token);
-        }
-        return response;
-      } catch (err) {
-        throw err;
-      }
-    }
-    
+
     async function signOut() {
       try {
-        if (currentUser?.isSupabaseAuth) {
-          await apiJson("/api/auth/logout", "POST", null);
-          localStorage.removeItem(SUPABASE_TOKEN_KEY);
-        }
-        currentUser = null;
-        authToken = null;
-      } catch (err) {
-        console.error('Sign out error:', err);
+        await apiJson("/api/auth/logout", "POST", null);
+      } catch {
+        // noop
       }
+      currentUser = null;
+      authToken = null;
     }
 
     let authMode = "signup";
@@ -2537,7 +2498,7 @@
       spawnDrops: [],
       baseLocks: {},
       remoteSnapshots: {},
-      profile: { username: "", email: "" },
+      profile: { username: "" },
       isAdmin: false,
       chatMessages: [],
       offlineMode: false
@@ -4745,56 +4706,20 @@
       return parsed || {};
     }
 
-    async function apiJsonAuth(url, method = "GET", body = null, forceRefresh = false) {
-      let token = await getAuthToken(!!forceRefresh);
+    async function apiJsonAuth(url, method = "GET", body = null) {
+      const token = authToken;
       if (!token) throw new Error("Not authenticated");
-      
-      // Prepare headers for new authentication system
-      const headers = {};
-      if (currentUser?.isSupabaseAuth) {
-        // Send Supabase JWT token in Authorization header
-        headers["authorization"] = `Bearer ${token}`;
-      } else if (currentUser?.isCrazyGames) {
-        // Send CrazyGames user info in header
-        headers["x-crazygames-user"] = JSON.stringify({
-          userId: currentUser.uid,
-          username: currentUser.name,
-          email: currentUser.email,
-          avatar: currentUser.avatar
-        });
-        headers["x-player-id"] = currentUser.uid;
-        headers["x-auth-token"] = token;
-      } else {
-        // Guest user
-        headers["x-player-id"] = currentUser.uid;
-        headers["x-auth-token"] = token;
-      }
-      
+      const headers = { authorization: `Bearer ${token}` };
       try {
         return await apiJson(url, method, body, token, headers);
       } catch (err) {
-        if (Number(err?.status || 0) !== 401) throw err;
-        authToken = "";
-        token = await getAuthToken(true);
-        if (!token) throw new Error("Session expired. Please reconnect.");
-        // Retry with refreshed token
-        const retryHeaders = {};
-        if (currentUser?.isSupabaseAuth) {
-          retryHeaders["authorization"] = `Bearer ${token}`;
-        } else if (currentUser?.isCrazyGames) {
-          retryHeaders["x-crazygames-user"] = JSON.stringify({
-            userId: currentUser.uid,
-            username: currentUser.name,
-            email: currentUser.email,
-            avatar: currentUser.avatar
-          });
-          retryHeaders["x-player-id"] = currentUser.uid;
-          retryHeaders["x-auth-token"] = token;
-        } else {
-          retryHeaders["x-player-id"] = currentUser.uid;
-          retryHeaders["x-auth-token"] = token;
+        if (Number(err?.status || 0) === 401) {
+          authToken = null;
+          currentUser = null;
+          void refreshAuthState();
+          throw new Error("Session expired. Please log in again.");
         }
-        return apiJson(url, method, body, token, retryHeaders);
+        throw err;
       }
     }
 
@@ -4982,20 +4907,16 @@
 
     async function createServerFromMenu() {
       const name = String(serverNameEl.value || "").trim() || "Garden Server";
-      const isPrivate = !!serverPrivateEl.checked;
       serverCreateBtn.disabled = true;
-      setServerMessage("Creating server (cost: 💫 25)...", true);
+      setServerMessage("Creating private server...", true);
       try {
         const data = await apiJsonAuth("/api/servers/create", "POST", {
           playerId: multiplayer.playerId,
-          name,
-          isPrivate
-        }, true);
-        if (Number.isFinite(Number(data?.stardust))) state.stardust = Math.max(0, Number(data.stardust));
+          name
+        });
         renderServerRows(data.servers || []);
-        setServerMessage("Server created (-💫 25).", true);
+        setServerMessage("Private server created.", true);
         serverNameEl.value = "";
-        if (!isPrivate) closeServerConfigPanel();
       } catch (err) {
         const detail = String(err?.payload?.error || err?.message || "Failed to create server.");
         setServerMessage(detail);
@@ -5013,32 +4934,6 @@
       if (!gameStarted) {
         gameStarted = true;
         joinMultiplayerAndLoad();
-      }
-    }
-
-    function startOfflineMode() {
-      multiplayer.offlineMode = true;
-      multiplayer.serverId = "offline-singleplayer";
-      multiplayer.serverName = "Offline Singleplayer";
-      multiplayer.connected = false;
-      multiplayer.playerId = "offline-player";
-      multiplayer.profile.username = "Offline Player";
-      multiplayer.slot = 0;
-      multiplayer.maxPlayers = 1;
-      multiplayer.allowStealing = false;
-      multiplayer.allowPvp = false;
-      multiplayer.serverLuck = 1;
-      multiplayer.serverLuckUntil = 0;
-      multiplayer.forcedBlueMoonUntil = 0;
-      multiplayer.forcedBlueMoonEventId = "";
-      multiplayer.spawnDrops = [];
-      multiplayer.occupiedSlots = [0];
-      closeServerConfigPanel();
-      serverGateEl.classList.remove("show");
-      authGateEl.classList.remove("show");
-      if (!gameStarted) {
-        gameStarted = true;
-        startSingleplayerGame();
       }
     }
 
@@ -5212,7 +5107,7 @@
       const parts = cmd.split(/\s+/);
       const head = String(parts[0] || "").toLowerCase();
       try {
-        const token = await getAuthToken();
+        const token = authToken;
         if (!token) {
           state.info = "No auth token.";
           return;
@@ -5527,31 +5422,11 @@
 
     function setAuthMode(mode) {
       authMode = mode === "login" ? "login" : "signup";
-      const isCrazyGames = isCrazyGamesEnvironment();
-      
-      if (isCrazyGames) {
-        // CrazyGames environment - simple connect button
-        if (authTabSignupEl) authTabSignupEl.style.display = "none";
-        if (authTabLoginEl) authTabLoginEl.style.display = "none";
-        if (authUsernameEl) authUsernameEl.style.display = "none";
-        if (authEmailEl) authEmailEl.style.display = "none";
-        if (authPasswordEl) authPasswordEl.style.display = "none";
-        if (authSubmitEl) authSubmitEl.textContent = "Connect to Game";
-      } else {
-        // Normal browser - email/password forms
-        if (authTabSignupEl) authTabSignupEl.style.display = "block";
-        if (authTabLoginEl) authTabLoginEl.style.display = "block";
-        if (authUsernameEl) authUsernameEl.style.display = "block";
-        if (authEmailEl) authEmailEl.style.display = "block";
-        if (authPasswordEl) authPasswordEl.style.display = "block";
-        
-        const signup = authMode === "signup";
-        if (authTabSignupEl) authTabSignupEl.classList.toggle("active", signup);
-        if (authTabLoginEl) authTabLoginEl.classList.toggle("active", !signup);
-        if (authUsernameEl) authUsernameEl.style.display = signup ? "block" : "none";
-        if (authSubmitEl) authSubmitEl.textContent = signup ? "Create Account" : "Log In";
-      }
-      
+      const signup = authMode === "signup";
+      if (authTabSignupEl) authTabSignupEl.classList.toggle("active", signup);
+      if (authTabLoginEl) authTabLoginEl.classList.toggle("active", !signup);
+      if (authPasswordEl) authPasswordEl.setAttribute("autocomplete", signup ? "new-password" : "current-password");
+      if (authSubmitEl) authSubmitEl.textContent = signup ? "Create Account" : "Log In";
       setAuthMessage("");
     }
 
@@ -5567,110 +5442,55 @@
       }
     }
 
-    async function getAuthToken(forceRefresh = false) {
-      if (!forceRefresh && authToken) return authToken;
-      if (!currentUser) {
-        currentUser = await initializeAuth();
-      }
-      return authToken || "";
-    }
-
     async function syncProfileToken(user, username = "") {
       try {
-        const data = await apiJsonAuth("/api/auth/profile", "POST", { username, playerId: user?.uid || "" }, true);
+        const data = await apiJsonAuth("/api/auth/profile", "POST", { username, playerId: user?.uid || "" });
         if (data?.profile && typeof data.profile === "object") {
           multiplayer.profile.username = String(data.profile.username || "");
-          multiplayer.profile.email = String(data.profile.email || user.email || "");
-        } else {
-          multiplayer.profile.username = multiplayer.profile.username || "";
-          multiplayer.profile.email = String(user.email || "");
         }
         multiplayer.isAdmin = !!data?.isAdmin;
         return data;
       } catch (err) {
         if (Number(err?.status || 0) === 409) throw err;
         // profile sync failure is non-fatal for gameplay
-        authToken = "";
-        multiplayer.profile.email = String(user?.email || "");
         multiplayer.isAdmin = false;
         return null;
       }
     }
 
     async function submitAuth() {
-      const isCrazyGames = isCrazyGamesEnvironment();
-      
+      const username = String(authUsernameEl?.value || "").trim();
+      const password = String(authPasswordEl?.value || "");
+
+      if (username.length < 3) {
+        setAuthMessage("Username must be at least 3 characters.");
+        return;
+      }
+      if (password.length < 6) {
+        setAuthMessage("Password must be at least 6 characters.");
+        return;
+      }
+
       authSubmitEl.disabled = true;
-      
+      setAuthMessage(authMode === "signup" ? "Creating account..." : "Logging in...", true);
       try {
-        if (isCrazyGames) {
-          // CrazyGames authentication
-          setAuthMessage("Connecting to CrazyGames...", true);
-          currentUser = await initializeAuth();
-          if (currentUser) {
-            setAuthMessage("Connected!", true);
-            await refreshAuthState();
-          } else {
-            setAuthMessage("Failed to connect to CrazyGames.");
-          }
-        } else {
-          // Normal browser - Supabase email/password authentication
-          const email = authEmailEl?.value?.trim();
-          const password = authPasswordEl?.value;
-          const username = authUsernameEl?.value?.trim();
-          
-          if (!email || !password) {
-            setAuthMessage("Enter email and password.");
-            return;
-          }
-          
-          if (authMode === "signup" && username.length < 3) {
-            setAuthMessage("Username must be at least 3 characters.");
-            return;
-          }
-          
-          setAuthMessage(authMode === "signup" ? "Creating account..." : "Logging in...", true);
-          
-          try {
-            let response;
-            if (authMode === "signup") {
-              // Check username availability
-              const checkResponse = await apiJson(`/api/auth/username/check?username=${encodeURIComponent(username)}`);
-              if (!checkResponse?.available) {
-                setAuthMessage("That username is already taken. Pick a new one.");
-                return;
-              }
-              
-              response = await signUpWithEmail(email, password, username);
-              if (response.ok) {
-                setAuthMessage("Account created! Please check your email to verify, then log in.");
-                setAuthMode("login");
-                return;
-              }
-            } else {
-              response = await signInWithEmail(email, password);
-              if (response.ok && response.token) {
-                authToken = response.token;
-                currentUser = {
-                  uid: response.user.id,
-                  email: response.user.email,
-                  name: response.user.username,
-                  isSupabaseAuth: true
-                };
-                setAuthMessage("Success!", true);
-                await refreshAuthState();
-                return;
-              }
-            }
-            
-            setAuthMessage(response?.error || "Authentication failed.");
-          } catch (err) {
-            setAuthMessage(err?.payload?.error || err?.message || "Authentication failed.");
-          }
+        const response = authMode === "signup"
+          ? await signUp(username, password)
+          : await signIn(username, password);
+        if (response?.ok && response.token && response.user) {
+          authToken = response.token;
+          currentUser = {
+            uid: String(response.user.id),
+            name: String(response.user.username || username)
+          };
+          if (authPasswordEl) authPasswordEl.value = "";
+          setAuthMessage("");
+          await refreshAuthState();
+          return;
         }
+        setAuthMessage(response?.error || "Authentication failed.");
       } catch (err) {
-        setAuthMessage("Authentication failed.");
-        console.error("Auth error:", err);
+        setAuthMessage(err?.payload?.error || err?.message || "Authentication failed.");
       } finally {
         authSubmitEl.disabled = false;
       }
@@ -10352,11 +10172,7 @@
         toggleAdminPanel();
       });
       dockLogoutBtn.addEventListener("click", async () => {
-        try {
-          await signOut(auth);
-        } catch {
-          // noop
-        }
+        await signOut();
         try { localStorage.removeItem(SESSION_HINT_KEY); } catch {}
         location.reload();
       });
@@ -10869,7 +10685,7 @@
 
     function connectWorldSocket() {
       const protocol = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${protocol}://${location.host}/ws?playerId=${encodeURIComponent(multiplayer.playerId)}&serverId=${encodeURIComponent(multiplayer.serverId)}`);
+      const ws = new WebSocket(`${protocol}://${location.host}/ws?token=${encodeURIComponent(authToken || "")}&serverId=${encodeURIComponent(multiplayer.serverId)}`);
       multiplayer.ws = ws;
       ws.addEventListener("message", (event) => {
         let msg = null;
@@ -11181,8 +10997,7 @@
           playerId: multiplayer.playerId,
           serverId: multiplayer.serverId,
           profile: {
-            username: multiplayer.profile.username || "",
-            email: multiplayer.profile.email || ""
+            username: multiplayer.profile.username || ""
           }
         });
         if (typeof joined.slot === "number") multiplayer.slot = joined.slot;
@@ -11214,7 +11029,6 @@
         if (Array.isArray(joined.occupiedSlots)) multiplayer.occupiedSlots = joined.occupiedSlots;
         if (joined.profile && typeof joined.profile === "object") {
           multiplayer.profile.username = String(joined.profile.username || multiplayer.profile.username || "");
-          multiplayer.profile.email = String(joined.profile.email || multiplayer.profile.email || "");
         }
         if (typeof joined.isAdmin === "boolean") multiplayer.isAdmin = joined.isAdmin;
         if (!multiplayer.isAdmin) toggleAdminPanel(false);
@@ -11302,33 +11116,35 @@
       requestAnimationFrame(frame);
     }
 
-    function startSingleplayerGame() {
-      state.info = "Playing in offline singleplayer mode. Progress saves locally.";
-      init();
-      const spawn = playerSpawnForSlot(multiplayer.slot);
-      player.pos.copy(spawn);
+    async function playRandomPublicServer() {
+      if (dashPlayBtnEl) dashPlayBtnEl.disabled = true;
+      setServerMessage("Finding a public server...", true);
       try {
-        const cached = JSON.parse(localStorage.getItem(OFFLINE_LOCAL_SAVE_KEY) || "null");
-        if (cached?.data) {
-          applyLoadedGameState(cached.data);
-          offlineDirty = true;
-        }
-      } catch {
-        // noop
+        const data = await apiJsonAuth("/api/play", "POST", {});
+        const server = data?.server;
+        if (!server?.id) throw new Error("No public server available.");
+        setServerMessage("");
+        chooseServer(String(server.id), String(server.name || server.id));
+      } catch (err) {
+        setServerMessage(String(err?.payload?.error || err?.message || "Could not join a public server."));
+      } finally {
+        if (dashPlayBtnEl) dashPlayBtnEl.disabled = false;
       }
-      state.dailyRewardMeta = {
-        ...state.dailyRewardMeta,
-        granted: false,
-        claimedToday: false
-      };
-      openDailyPanel(state.dailyRewardMeta);
-      offlineDirty = true;
-      updateUI();
-      requestAnimationFrame(frame);
+    }
+
+    function toggleServersPanel() {
+      if (!serversPanelEl) return;
+      const open = serversPanelEl.classList.toggle("show");
+      if (open) void loadServers();
+    }
+
+    async function logoutFromDashboard() {
+      await signOut();
+      void refreshAuthState();
     }
 
     function initAuthFlow() {
-      setAuthMode(isCrazyGamesEnvironment() ? "connect" : "signup");
+      setAuthMode("signup");
       if (authSubmitEl) authSubmitEl.addEventListener("click", submitAuth);
       
       // Add event listeners for auth tabs
@@ -11336,13 +11152,16 @@
       if (authTabLoginEl) authTabLoginEl.addEventListener("click", () => setAuthMode("login"));
       
       // Add enter key support for form fields
-      [authEmailEl, authPasswordEl, authUsernameEl].forEach((el) => {
+      [authPasswordEl, authUsernameEl].forEach((el) => {
         if (el) {
           el.addEventListener("keydown", (e) => {
             if (e.key === "Enter") submitAuth();
           });
         }
       });
+      if (dashPlayBtnEl) dashPlayBtnEl.addEventListener("click", () => { void playRandomPublicServer(); });
+      if (dashServersBtnEl) dashServersBtnEl.addEventListener("click", toggleServersPanel);
+      if (dashLogoutBtnEl) dashLogoutBtnEl.addEventListener("click", () => { void logoutFromDashboard(); });
       serverRefreshBtn.addEventListener("click", async () => {
         serverRefreshBtn.disabled = true;
         setServerMessage("Refreshing...", true);
@@ -11355,7 +11174,6 @@
         void loadServers();
       });
       serverCreateBtn.addEventListener("click", createServerFromMenu);
-      playOfflineBtn.addEventListener("click", startOfflineMode);
       serverCfgSaveBtnEl.addEventListener("click", () => { void saveServerConfigSettingsFromUi(); });
       serverRowsEl.addEventListener("click", (e) => {
         const target = e.target;
@@ -11388,39 +11206,34 @@
         const username = String(btn.dataset.username || "").trim();
         if (username) void removeWhitelistUsernameFromUi(username);
       });
-      // Simplified authentication - no form fields needed
-      // Initialize authentication on load
-      initializeAuth().then(() => {
-        refreshAuthState();
-      });
+      // No auto-login: the auth gate stays visible until the player signs in.
       refreshAuthState();
     }
 
     async function refreshAuthState() {
       try {
-        if (!currentUser) throw new Error("no-session");
+        if (!currentUser || !authToken) throw new Error("no-session");
         multiplayer.playerId = String(currentUser?.uid || "");
-        const synced = await syncProfileToken({ email: currentUser.email, uid: currentUser.uid }, desiredUsername);
+        const synced = await syncProfileToken({ uid: currentUser.uid }, desiredUsername);
         if (!synced?.profile?.username && desiredUsername) {
           multiplayer.profile.username = desiredUsername;
         }
         if (!multiplayer.profile.username && currentUser?.name) {
           multiplayer.profile.username = String(currentUser.name).slice(0, 24);
         }
-        multiplayer.profile.email = multiplayer.profile.email || String(currentUser.email || "");
         desiredUsername = "";
         multiplayer.serverSearchQuery = "";
         serverSearchEl.value = "";
         closeServerConfigPanel();
+        if (dashWelcomeEl) dashWelcomeEl.textContent = `Welcome, ${multiplayer.profile.username || currentUser.name || "player"}!`;
+        if (serversPanelEl) serversPanelEl.classList.remove("show");
         authGateEl.classList.remove("show");
         serverGateEl.classList.add("show");
-        await loadServers();
-        setServerMessage("Select a server to play.");
+        setServerMessage("");
       } catch {
-        try { localStorage.removeItem(GUEST_STORAGE_KEY); } catch {}
-        authToken = "";
+        authToken = null;
         currentUser = null;
-        multiplayer.profile = { username: "", email: "" };
+        multiplayer.profile = { username: "" };
         multiplayer.isAdmin = false;
         multiplayer.chatMessages = [];
         multiplayer.remoteSnapshots = {};
