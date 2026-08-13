@@ -1,6 +1,6 @@
 // User repository for database operations
 import { query, transaction } from '../connection.js';
-import type { User, PlayerProfile, PlayerSettings } from '@shared/types/index.js';
+import type { User, PlayerProfile, PlayerSettings } from '../../shared/types/index.js';
 
 export class UserRepository {
   async findById(id: string): Promise<User | null> {

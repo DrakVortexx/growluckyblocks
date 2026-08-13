@@ -2,26 +2,16 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "bundler",
     "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "rootDir": "./src",
     "outDir": "./dist",
-    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "types": ["node"],
-    "baseUrl": "..",
-    "paths": {
-      "@shared/*": ["shared/*"]
-    },
-    "ignoreDeprecations": "6.0"
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*", "../shared/**/*"],
-  "exclude": ["node_modules", "dist", "client", "database"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

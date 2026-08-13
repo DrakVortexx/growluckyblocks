@@ -2,8 +2,8 @@
 import { userRepository } from '../database/repositories/UserRepository.js';
 import { serverRepository } from '../database/repositories/ServerRepository.js';
 import { query, transaction } from '../database/connection.js';
-import type { RarityKey, MutationType, TraitType, LuckyBlock, Creature } from '@shared/types/index.js';
-import { STEAL_TIME_BY_RANK, SPAWN_CREATURE_CATALOG, rankWeightForSpawn } from '@shared/constants/index.js';
+import type { RarityKey, MutationType, TraitType, LuckyBlock, Creature } from '../shared/types/index.js';
+import { STEAL_TIME_BY_RANK, SPAWN_CREATURE_CATALOG, rankWeightForSpawn } from '../shared/constants/index.js';
 
 export class GameService {
   // Lucky Block Operations

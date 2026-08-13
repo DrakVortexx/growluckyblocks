@@ -1,6 +1,6 @@
 // Server repository for database operations
 import { query, transaction } from '../connection.js';
-import type { Server, ServerPlayer } from '@shared/types/index.js';
+import type { Server, ServerPlayer } from '../../shared/types/index.js';
 
 export class ServerRepository {
   async findById(id: string): Promise<Server | null> {
