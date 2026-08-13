@@ -1,7 +1,7 @@
 // Main server entry point
-import express from 'express';
-import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
+import express, { Request, Response } from 'express';
+import { createServer, IncomingMessage } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
 import { verifyAuth, AuthRequest } from './auth/middleware.js';
 import { userRepository } from './database/repositories/UserRepository.js';
@@ -18,12 +18,12 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 app.use(express.json());
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Authentication endpoints
-app.post('/api/auth/signup', async (req: AuthRequest, res) => {
+app.post('/api/auth/signup', async (req: AuthRequest, res: Response) => {
   try {
     const { email, password, username } = req.body;
 
@@ -55,24 +55,24 @@ app.post('/api/auth/signup', async (req: AuthRequest, res) => {
     await userRepository.createSettings(user.id);
 
     res.json({ ok: true, user });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Signup error:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
 // Server endpoints
-app.get('/api/servers', async (req: AuthRequest, res) => {
+app.get('/api/servers', async (req: AuthRequest, res: Response) => {
   try {
     const servers = await serverRepository.findAll();
     res.json({ servers });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get servers error:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
-app.post('/api/servers/create', async (req: AuthRequest, res) => {
+app.post('/api/servers/create', async (req: AuthRequest, res: Response) => {
   try {
     const user = await verifyAuth(req, res);
     if (!user) return;
@@ -95,14 +95,14 @@ app.post('/api/servers/create', async (req: AuthRequest, res) => {
     });
 
     res.json({ ok: true, server });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create server error:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
 // Player endpoints
-app.get('/api/player/me', async (req: AuthRequest, res) => {
+app.get('/api/player/me', async (req: AuthRequest, res: Response) => {
   try {
     const user = await verifyAuth(req, res);
     if (!user) return;
@@ -120,14 +120,14 @@ app.get('/api/player/me', async (req: AuthRequest, res) => {
       profile,
       settings
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get player error:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
 // WebSocket connection
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const playerId = url.searchParams.get('playerId');
   const serverId = url.searchParams.get('serverId') || 'public-1';
@@ -147,9 +147,9 @@ wss.on('connection', (ws, req) => {
     timestamp: Date.now()
   }));
 
-  ws.on('message', (data: string) => {
+  ws.on('message', (data: Buffer) => {
     try {
-      const message = JSON.parse(data);
+      const message = JSON.parse(data.toString());
       console.log('WebSocket message:', message);
 
       // Handle different message types
@@ -163,7 +163,7 @@ wss.on('connection', (ws, req) => {
         default:
           console.log('Unknown message type:', message.type);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('WebSocket message error:', error);
     }
   });
@@ -172,7 +172,7 @@ wss.on('connection', (ws, req) => {
     console.log(`WebSocket disconnected: playerId=${playerId}`);
   });
 
-  ws.on('error', (error) => {
+  ws.on('error', (error: Error) => {
     console.error('WebSocket error:', error);
   });
 });
