@@ -4,8 +4,8 @@ services:
     name: grow-lucky-blocks
     env: node
     plan: free
-    buildCommand: "npm install"
-    startCommand: "node server.js"
+    buildCommand: "npm install && npm run build"
+    startCommand: "node dist/index.js"
     healthCheckPath: /
     autoDeploy: true
     
@@ -15,21 +15,20 @@ services:
         value: production
       - key: PORT
         value: 10000
-      - key: SUPABASE_URL
+      - key: DATABASE_URL
+        sync: false  # Set in Render dashboard (Neon PostgreSQL)
+      - key: JWT_SECRET
         sync: false  # Set in Render dashboard
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false  # Set in Render dashboard  
-      - key: SUPABASE_ANON_KEY
-        sync: false  # Set in Render dashboard
-      - key: SUPABASE_PLAYERS_TABLE_ID
-        value: player_data
+      - key: ADMIN_EMAIL
+        value: naturebenji@gmail.com
+      - key: ADMIN_USERNAME
+        value: DrakVortexx
 
 # Configuration for deploying to Render.com
 # Instructions:
-# 1. Set up Supabase project and get credentials
+# 1. Set up Neon PostgreSQL project and get connection string
 # 2. Add environment variables in Render dashboard:
-#    - SUPABASE_URL: your Supabase project URL
-#    - SUPABASE_SERVICE_ROLE_KEY: your Supabase service role key
-#    - SUPABASE_ANON_KEY: your Supabase anonymous key
+#    - DATABASE_URL: your Neon PostgreSQL connection string (must include ?sslmode=require)
+#    - JWT_SECRET: a secure secret key for JWT token signing
 # 3. Deploy this repository to Render
 # 4. The app will be available at your-app-name.onrender.com
