@@ -14,11 +14,11 @@ export class ServerRepository {
     const rows = result.rows;
     if (!rows[0]) return null;
     
-    const server = rows[0];
+    const server = rows[0] as any;
     return {
       ...server,
-      playerCount: Number(server.playerCount),
-      whitelistCount: Number(server.whitelistCount)
+      playerCount: Number(server.player_count),
+      whitelistCount: Number(server.whitelist_count)
     };
   }
 
@@ -46,13 +46,13 @@ export class ServerRepository {
     isPrivate: boolean;
     maxPlayers: number;
   }): Promise<Server> {
-    const rows = await query<Server>(
+    const result = await query<Server>(
       `INSERT INTO servers (id, name, description, owner_id, is_private, max_players)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [data.id, data.name, data.description, data.ownerId, data.isPrivate, data.maxPlayers]
     );
-    return rows[0];
+    return result.rows[0] as Server;
   }
 
   async update(id: string, data: Partial<Server>): Promise<Server | null> {
@@ -100,11 +100,11 @@ export class ServerRepository {
     if (updates.length === 0) return this.findById(id);
 
     values.push(id);
-    const rows = await query<Server>(
+    const result = await query<Server>(
       `UPDATE servers SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       values
     );
-    return rows[0] || null;
+    return result.rows[0] || null;
   }
 
   async delete(id: string): Promise<boolean> {
@@ -113,13 +113,13 @@ export class ServerRepository {
   }
 
   async addPlayer(serverId: string, userId: string, slot: number): Promise<ServerPlayer> {
-    const rows = await query<ServerPlayer>(
+    const result = await query<ServerPlayer>(
       `INSERT INTO server_players (server_id, user_id, slot, position_x, position_z, position_yaw)
        VALUES ($1, $2, $3, 0, 0, 0)
        RETURNING *`,
       [serverId, userId, slot]
     );
-    return rows[0];
+    return result.rows[0] as ServerPlayer;
   }
 
   async removePlayer(serverId: string, userId: string): Promise<boolean> {
@@ -141,11 +141,11 @@ export class ServerRepository {
   }
 
   async getPlayers(serverId: string): Promise<ServerPlayer[]> {
-    const rows = await query<ServerPlayer>(
+    const result = await query<ServerPlayer>(
       'SELECT * FROM server_players WHERE server_id = $1 ORDER BY slot',
       [serverId]
     );
-    return rows;
+    return result.rows;
   }
 
   async addToWhitelist(serverId: string, userId: string): Promise<boolean> {

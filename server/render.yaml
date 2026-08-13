@@ -4,8 +4,9 @@ services:
     name: grow-lucky-blocks
     env: node
     plan: free
-    buildCommand: "cd server && npm install && npm run build"
-    startCommand: "cd server && node dist/index.js"
+    rootDir: server
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
     healthCheckPath: /
     autoDeploy: true
     

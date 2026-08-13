@@ -1,5 +1,5 @@
 // Database connection using Neon PostgreSQL
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -12,7 +12,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-export async function query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
+export async function query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
