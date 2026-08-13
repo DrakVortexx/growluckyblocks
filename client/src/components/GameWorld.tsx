@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Text, Box, Sphere } from '@react-three/drei'
+import { Text } from '@react-three/drei'
 import * as THREE from 'three'
 
 export default function GameWorld() {
@@ -62,7 +62,7 @@ function BasePlatform({ position, slot }: { position: [number, number, number]; 
   )
 }
 
-function Pedestal({ position, index }: { position: [number, number, number]; index: number }) {
+function Pedestal({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
       {/* Pedestal base */}

@@ -6,8 +6,6 @@ import UI from './components/UI'
 import { useGameStore } from './store/gameStore'
 
 function App() {
-  const { connected } = useGameStore()
-
   return (
     <div className="w-full h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       {/* 3D Canvas */}
