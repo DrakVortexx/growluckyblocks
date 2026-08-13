@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { User, PlayerProfile, Server, WebSocketMessage } from '../shared/types/index.js'
+import type { User, PlayerProfile, Server, WebSocketMessage } from '../../shared/types/index.js'
 
 interface GameState {
   // Connection

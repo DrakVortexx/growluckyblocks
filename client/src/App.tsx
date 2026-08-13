@@ -3,7 +3,6 @@ import { OrbitControls, Stars, Sky } from '@react-three/drei'
 import { Suspense } from 'react'
 import GameWorld from './components/GameWorld'
 import UI from './components/UI'
-import { useGameStore } from './store/gameStore'
 
 function App() {
   return (

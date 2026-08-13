@@ -45,7 +45,7 @@ function BasePlatform({ position, slot }: { position: [number, number, number]; 
         const col = i % 5
         const x = (col - 2) * 1.5
         const z = (row - 0.5) * 1.5
-        return <Pedestal key={i} position={[x, 0.5, z]} index={i} />
+        return <Pedestal key={i} position={[x, 0.5, z]} />
       })}
 
       {/* Slot label */}
