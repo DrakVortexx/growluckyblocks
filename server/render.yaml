@@ -5,9 +5,9 @@ services:
     env: node
     plan: free
     rootDir: server
-    buildCommand: "npm install && npm run build"
+    buildCommand: "npm install --include=dev && npm run build"
     startCommand: "npm start"
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true
     
     # Environment Variables (set these in Render dashboard)
