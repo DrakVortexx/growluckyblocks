@@ -3,7 +3,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import { verifyAuth } from './auth/middleware.js';
+import cors from 'cors';
+import { verifyAuth, generateToken } from './auth/middleware.js';
 import { userRepository } from './database/repositories/UserRepository.js';
 import { serverRepository } from './database/repositories/ServerRepository.js';
 dotenv.config();
@@ -11,6 +12,23 @@ const PORT = Number(process.env.PORT) || 3000;
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
+// CORS configuration
+const allowedOrigins = [
+    'https://playgrowlb.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
+];
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
 // Middleware
 app.use(express.json());
 // Health check
@@ -37,16 +55,44 @@ app.post('/api/auth/signup', async (req, res) => {
         const user = await userRepository.create({
             username,
             email,
-            authProvider: 'supabase',
-            authProviderId: email // Temporary, should be Supabase user ID
+            authProvider: 'local',
+            authProviderId: email
         });
         // Create profile and settings
         await userRepository.createProfile(user.id);
         await userRepository.createSettings(user.id);
-        res.json({ ok: true, user });
+        // Generate token
+        const token = generateToken(user.id);
+        res.json({ ok: true, user, token });
     }
     catch (error) {
         console.error('Signup error:', error);
+        res.status(500).json({ error: 'Internal error' });
+    }
+});
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password required' });
+        }
+        // Find user by email
+        const user = await userRepository.findByEmail(email);
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        // For now, we'll accept any password since we don't have password hashing implemented
+        // In production, verify the password hash
+        // const isValid = await verifyPassword(password, user.passwordHash);
+        // if (!isValid) {
+        //   return res.status(401).json({ error: 'Invalid credentials' });
+        // }
+        // Generate token
+        const token = generateToken(user.id);
+        res.json({ ok: true, user, token });
+    }
+    catch (error) {
+        console.error('Login error:', error);
         res.status(500).json({ error: 'Internal error' });
     }
 });

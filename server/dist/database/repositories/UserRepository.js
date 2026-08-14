@@ -9,6 +9,30 @@ export class UserRepository {
         const result = await query('SELECT * FROM users WHERE username_lower = $1', [username.toLowerCase()]);
         return result.rows[0] || null;
     }
+    async findByEmail(email) {
+        const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+        return result.rows[0] || null;
+    }
+    async login(username) {
+        const cleanUsername = username.trim().replace(/[^a-zA-Z0-9_ -]/g, '').slice(0, 24);
+        if (cleanUsername.length < 3) {
+            throw new Error('Username must be at least 3 characters');
+        }
+        let user = await this.findByUsername(cleanUsername);
+        if (!user) {
+            user = await this.create({
+                username: cleanUsername,
+                authProvider: 'player',
+                authProviderId: cleanUsername.toLowerCase()
+            });
+        }
+        else {
+            await this.update(user.id, { lastSeenAt: new Date() });
+        }
+        const profile = await this.getProfile(user.id) || await this.createProfile(user.id);
+        const settings = await this.getSettings(user.id) || await this.createSettings(user.id);
+        return { user, profile, settings };
+    }
     async findByAuthProvider(provider, providerId) {
         const result = await query('SELECT * FROM users WHERE auth_provider = $1 AND auth_provider_id = $2', [provider, providerId]);
         return result.rows[0] || null;

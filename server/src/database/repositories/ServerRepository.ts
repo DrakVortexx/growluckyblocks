@@ -38,6 +38,53 @@ export class ServerRepository {
     }));
   }
 
+  async findPrivate(): Promise<Server[]> {
+    const result = await query<Server>(
+      `SELECT s.*,
+        (SELECT COUNT(*) FROM server_players WHERE server_id = s.id) as player_count,
+        (SELECT COUNT(*) FROM server_whitelist WHERE server_id = s.id) as whitelist_count
+       FROM servers s
+       WHERE s.is_private = TRUE
+       ORDER BY s.created_at DESC`
+    );
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      playerCount: Number(row.player_count),
+      whitelistCount: Number(row.whitelist_count)
+    }));
+  }
+
+  async findPublicWithSpace(): Promise<Server[]> {
+    const result = await query<Server>(
+      `SELECT s.*,
+        (SELECT COUNT(*) FROM server_players WHERE server_id = s.id) as player_count,
+        (SELECT COUNT(*) FROM server_whitelist WHERE server_id = s.id) as whitelist_count
+       FROM servers s
+       WHERE s.is_private = FALSE
+       ORDER BY s.created_at ASC`
+    );
+
+    return result.rows
+      .map((row: any) => ({
+        ...row,
+        playerCount: Number(row.player_count),
+        whitelistCount: Number(row.whitelist_count)
+      }))
+      .filter((server: any) => server.playerCount < Number(server.max_players || server.maxPlayers || 8));
+  }
+
+  async ensurePublicServers(count = 3): Promise<void> {
+    for (let index = 1; index <= count; index += 1) {
+      await query(
+        `INSERT INTO servers (id, name, description, owner_id, is_private, max_players)
+         VALUES ($1, $2, $3, NULL, FALSE, 8)
+         ON CONFLICT (id) DO NOTHING`,
+        [`public-${index}`, `Public ${index}`, 'Open world for quick play']
+      );
+    }
+  }
+
   async create(data: {
     id: string;
     name: string;
