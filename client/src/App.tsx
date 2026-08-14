@@ -25,37 +25,41 @@ function App() {
     <div className="w-full h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       {!user && <Auth />}
       
-      <Canvas
-        camera={{ position: [0, 10, 20], fov: 60 }}
-        shadows
-        gl={{ antialias: true, alpha: true }}
-      >
-        <Suspense fallback={null}>
-          <ambientLight intensity={0.5} />
-          <directionalLight
-            position={[10, 20, 10]}
-            intensity={1}
-            castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-          />
-          
-          <Sky sunPosition={[100, 20, 100]} />
-          <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-          
-          <GameWorld />
-          
-          <OrbitControls
-            enablePan={false}
-            minPolarAngle={Math.PI / 4}
-            maxPolarAngle={Math.PI / 2}
-            minDistance={5}
-            maxDistance={50}
-          />
-        </Suspense>
-      </Canvas>
+      {user && (
+        <>
+          <Canvas
+            camera={{ position: [0, 10, 20], fov: 60 }}
+            shadows
+            gl={{ antialias: true, alpha: true }}
+          >
+            <Suspense fallback={null}>
+              <ambientLight intensity={0.5} />
+              <directionalLight
+                position={[10, 20, 10]}
+                intensity={1}
+                castShadow
+                shadow-mapSize-width={2048}
+                shadow-mapSize-height={2048}
+              />
+              
+              <Sky sunPosition={[100, 20, 100]} />
+              <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+              
+              <GameWorld />
+              
+              <OrbitControls
+                enablePan={false}
+                minPolarAngle={Math.PI / 4}
+                maxPolarAngle={Math.PI / 2}
+                minDistance={5}
+                maxDistance={50}
+              />
+            </Suspense>
+          </Canvas>
 
-      {user && <UI />}
+          <UI />
+        </>
+      )}
     </div>
   )
 }
