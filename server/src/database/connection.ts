@@ -1,18 +1,13 @@
-// Database connection using Neon PostgreSQL
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('neon.tech') ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
 });
 
-export async function query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
+export async function query(text: string, params?: any[]) {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
@@ -22,26 +17,6 @@ export async function query<T extends QueryResultRow = any>(text: string, params
   } catch (error) {
     console.error('Database query error:', error);
     throw error;
-  }
-}
-
-export async function getClient(): Promise<PoolClient> {
-  const client = await pool.connect();
-  return client;
-}
-
-export async function transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await getClient();
-  try {
-    await client.query('BEGIN');
-    const result = await callback(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
   }
 }
 

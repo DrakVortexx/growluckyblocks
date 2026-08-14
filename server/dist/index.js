@@ -1,10 +1,9 @@
-// Main server entry point
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { verifyAuth, generateToken } from './auth/middleware.js';
+import { verifyToken, generateToken } from './auth/middleware.js';
 import { userRepository } from './database/repositories/UserRepository.js';
 import { serverRepository } from './database/repositories/ServerRepository.js';
 dotenv.config();
@@ -45,23 +44,18 @@ app.post('/api/auth/signup', async (req, res) => {
         if (!username || username.length < 3) {
             return res.status(400).json({ error: 'Username must be at least 3 characters' });
         }
-        // Check if username is already taken
         const existingUser = await userRepository.findByUsername(username);
         if (existingUser) {
             return res.status(409).json({ error: 'Username already taken' });
         }
-        // For now, we'll create a user without actual Supabase auth
-        // In production, this would call Supabase auth first
         const user = await userRepository.create({
             username,
             email,
             authProvider: 'local',
             authProviderId: email
         });
-        // Create profile and settings
         await userRepository.createProfile(user.id);
         await userRepository.createSettings(user.id);
-        // Generate token
         const token = generateToken(user.id);
         res.json({ ok: true, user, token });
     }
@@ -76,18 +70,10 @@ app.post('/api/auth/login', async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password required' });
         }
-        // Find user by email
         const user = await userRepository.findByEmail(email);
         if (!user) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        // For now, we'll accept any password since we don't have password hashing implemented
-        // In production, verify the password hash
-        // const isValid = await verifyPassword(password, user.passwordHash);
-        // if (!isValid) {
-        //   return res.status(401).json({ error: 'Invalid credentials' });
-        // }
-        // Generate token
         const token = generateToken(user.id);
         res.json({ ok: true, user, token });
     }
@@ -109,9 +95,15 @@ app.get('/api/servers', async (req, res) => {
 });
 app.post('/api/servers/create', async (req, res) => {
     try {
-        const user = await verifyAuth(req, res);
-        if (!user)
-            return;
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+        const token = authHeader.replace('Bearer ', '');
+        const authUser = verifyToken(token);
+        if (!authUser) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
         const { name, description, isPrivate, maxPlayers } = req.body;
         if (!name || name.length < 1) {
             return res.status(400).json({ error: 'Server name required' });
@@ -121,7 +113,7 @@ app.post('/api/servers/create', async (req, res) => {
             id: serverId,
             name,
             description,
-            ownerId: user.uid,
+            ownerId: authUser.uid,
             isPrivate: isPrivate || false,
             maxPlayers: maxPlayers || 8
         });
@@ -135,12 +127,18 @@ app.post('/api/servers/create', async (req, res) => {
 // Player endpoints
 app.get('/api/player/me', async (req, res) => {
     try {
-        const user = await verifyAuth(req, res);
-        if (!user)
-            return;
-        const dbUser = await userRepository.findById(user.uid);
-        const profile = await userRepository.getProfile(user.uid);
-        const settings = await userRepository.getSettings(user.uid);
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+        const token = authHeader.replace('Bearer ', '');
+        const authUser = verifyToken(token);
+        if (!authUser) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+        const dbUser = await userRepository.findById(authUser.uid);
+        const profile = await userRepository.getProfile(authUser.uid);
+        const settings = await userRepository.getSettings(authUser.uid);
         if (!dbUser) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -165,7 +163,6 @@ wss.on('connection', (ws, req) => {
         ws.close();
         return;
     }
-    // Send initial state
     ws.send(JSON.stringify({
         type: 'connected',
         playerId,
@@ -176,13 +173,10 @@ wss.on('connection', (ws, req) => {
         try {
             const message = JSON.parse(data.toString());
             console.log('WebSocket message:', message);
-            // Handle different message types
             switch (message.type) {
                 case 'pos':
-                    // Update player position
                     break;
                 case 'chat':
-                    // Handle chat message
                     break;
                 default:
                     console.log('Unknown message type:', message.type);

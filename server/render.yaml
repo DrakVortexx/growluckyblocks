@@ -20,16 +20,3 @@ services:
         sync: false  # Set in Render dashboard (Neon PostgreSQL)
       - key: JWT_SECRET
         sync: false  # Set in Render dashboard
-      - key: ADMIN_EMAIL
-        value: naturebenji@gmail.com
-      - key: ADMIN_USERNAME
-        value: DrakVortexx
-
-# Configuration for deploying to Render.com
-# Instructions:
-# 1. Set up Neon PostgreSQL project and get connection string
-# 2. Add environment variables in Render dashboard:
-#    - DATABASE_URL: your Neon PostgreSQL connection string (must include ?sslmode=require)
-#    - JWT_SECRET: a secure secret key for JWT token signing
-# 3. Deploy this repository to Render
-# 4. The app will be available at your-app-name.onrender.com
