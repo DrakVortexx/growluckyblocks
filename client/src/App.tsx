@@ -1,13 +1,25 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stars, Sky } from '@react-three/drei'
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import GameWorld from './components/GameWorld'
 import UI from './components/UI'
 import Auth from './components/Auth'
 import { useGameStore } from './store/gameStore'
 
 function App() {
-  const { user } = useGameStore()
+  const { user, isLoading, initializeAuth } = useGameStore()
+
+  useEffect(() => {
+    initializeAuth()
+  }, [initializeAuth])
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full h-screen bg-gradient-to-b from-slate-900 to-slate-800">

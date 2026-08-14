@@ -24,6 +24,8 @@ export default function Auth() {
         if (response.ok && response.user && response.token) {
           localStorage.setItem('token', response.token)
           setUser(response.user)
+        } else {
+          setError('Login failed. Please check your credentials.')
         }
       } else {
         // Signup
@@ -37,10 +39,13 @@ export default function Auth() {
         if (response.ok && response.user && response.token) {
           localStorage.setItem('token', response.token)
           setUser(response.user)
+        } else {
+          setError('Signup failed. Please try again.')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed')
+      console.error('Auth error:', err)
+      setError(err.message || 'Authentication failed. Please check your connection.')
     } finally {
       setLoading(false)
     }
@@ -70,6 +75,7 @@ export default function Auth() {
                 className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
                 placeholder="Enter username"
                 required={!isLogin}
+                disabled={loading}
               />
             </div>
           )}
@@ -83,6 +89,7 @@ export default function Auth() {
               className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
               placeholder="Enter email"
               required
+              disabled={loading}
             />
           </div>
 
@@ -95,6 +102,7 @@ export default function Auth() {
               className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
               placeholder="Enter password"
               required
+              disabled={loading}
             />
           </div>
 
@@ -110,8 +118,12 @@ export default function Auth() {
         <div className="mt-4 text-center">
           <button
             type="button"
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin)
+              setError('')
+            }}
             className="text-blue-400 hover:text-blue-300 transition-colors"
+            disabled={loading}
           >
             {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Login'}
           </button>

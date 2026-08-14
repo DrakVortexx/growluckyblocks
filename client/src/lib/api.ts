@@ -1,5 +1,5 @@
 // API client utility for server communication
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
+const API_URL = (import.meta as any).env?.VITE_API_URL || 'https://growluckyblocks-tfpd.onrender.com';
 
 console.log('API URL:', API_URL);
 
