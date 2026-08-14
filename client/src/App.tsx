@@ -3,10 +3,16 @@ import { OrbitControls, Stars, Sky } from '@react-three/drei'
 import { Suspense } from 'react'
 import GameWorld from './components/GameWorld'
 import UI from './components/UI'
+import Auth from './components/Auth'
+import { useGameStore } from './store/gameStore'
 
 function App() {
+  const { user } = useGameStore()
+
   return (
     <div className="w-full h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+      {!user && <Auth />}
+      
       {/* 3D Canvas */}
       <Canvas
         camera={{ position: [0, 10, 20], fov: 60 }}
@@ -43,7 +49,7 @@ function App() {
       </Canvas>
 
       {/* UI Overlay */}
-      <UI />
+      {user && <UI />}
     </div>
   )
 }

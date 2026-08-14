@@ -1,5 +1,5 @@
 // User repository for database operations
-import { query, transaction } from '../connection.js';
+import { query } from '../connection.js';
 import type { User, PlayerProfile, PlayerSettings } from '../../shared/types/index.js';
 
 export class UserRepository {
@@ -17,6 +17,37 @@ export class UserRepository {
       [username.toLowerCase()]
     );
     return result.rows[0] || null;
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const result = await query<User>(
+      'SELECT * FROM users WHERE email = $1',
+      [email]
+    );
+    return result.rows[0] || null;
+  }
+
+  async login(username: string): Promise<{ user: User; profile: PlayerProfile; settings: PlayerSettings }> {
+    const cleanUsername = username.trim().replace(/[^a-zA-Z0-9_ -]/g, '').slice(0, 24);
+    if (cleanUsername.length < 3) {
+      throw new Error('Username must be at least 3 characters');
+    }
+
+    let user = await this.findByUsername(cleanUsername);
+    if (!user) {
+      user = await this.create({
+        username: cleanUsername,
+        authProvider: 'player',
+        authProviderId: cleanUsername.toLowerCase()
+      });
+    } else {
+      await this.update(user.id, { lastSeenAt: new Date() } as Partial<User>);
+    }
+
+    const profile = await this.getProfile(user.id) || await this.createProfile(user.id);
+    const settings = await this.getSettings(user.id) || await this.createSettings(user.id);
+
+    return { user, profile, settings };
   }
 
   async findByAuthProvider(provider: string, providerId: string): Promise<User | null> {

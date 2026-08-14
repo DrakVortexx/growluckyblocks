@@ -1,0 +1,20 @@
+services:
+  # Static Site
+  - type: web
+    name: playgrowlb
+    env: static
+    plan: free
+    buildCommand: "npm install && npm run build"
+    publishDir: "dist"
+    autoDeploy: true
+    
+    # Environment Variables
+    envVars:
+      - key: VITE_API_URL
+        value: https://growluckyblocks-tfpd.onrender.com
+
+# Configuration for deploying client to Render.com
+# Instructions:
+# 1. Deploy this repository to Render as a Static Site
+# 2. The app will be available at your-app-name.onrender.com
+# 3. VITE_API_URL is compiled into the client at build time

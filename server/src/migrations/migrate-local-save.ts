@@ -46,7 +46,7 @@ export async function migrateLocalSave(legacyData: LegacyPlayerData): Promise<{ 
 }
 
 // CLI interface for running migrations
-if (import.meta.url === `file://${process.argv[1]}`) {
+if ((import.meta as any).url === `file://${process.argv[1]}`) {
   console.log('Migration tool - provide legacy data as JSON via stdin or file');
   console.log('This is a placeholder - implement actual migration based on your legacy data source');
   process.exit(0);
