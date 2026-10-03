@@ -1,0 +1,14 @@
+{
+  "name": "grow-lucky-blocks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "pg": "^8.11.3"
+  }
+}
