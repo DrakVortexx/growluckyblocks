@@ -1,15 +1,20 @@
 # Grow Lucky Blocks
 
-A simple multiplayer 3D game built with vanilla JavaScript, Three.js, Express, and PostgreSQL.
+A multiplayer 3D game built with React, Three.js, Express, and PostgreSQL.
 
 ## Project Structure
 
 ```
 growluckyblocks-main/
-├── index.html       # Main game client
-├── game.js          # Client-side game logic
+├── client/          # React + Three.js game client
+│   ├── src/
+│   │   ├── components/    # React components (Auth, GameWorld, UI)
+│   │   ├── lib/          # API client
+│   │   ├── store/        # Zustand state management
+│   │   └── main.tsx      # App entry point
+│   └── package.json
 ├── server.js        # Express + WebSocket server
-├── package.json     # Dependencies
+├── package.json     # Root dependencies
 ├── .env.example     # Environment variables template
 ├── render.yaml      # Render deployment configuration
 └── assets/          # 3D models and game assets
@@ -33,16 +38,22 @@ growluckyblocks-main/
 ### 2. Install dependencies
 
 ```bash
-npm install
+npm run install:all
 ```
 
-### 3. Start the server
+### 3. Start the application
 
+Terminal 1 (server):
 ```bash
-npm start
+npm run dev:server
 ```
 
-The game will be available at `http://localhost:3000`
+Terminal 2 (client):
+```bash
+npm run dev:client
+```
+
+The game will be available at `http://localhost:5173`
 
 ## Deployment
 
@@ -67,17 +78,17 @@ The deployed app will serve both the client and server from a single URL.
 
 ## Game Features
 
-- Multiplayer 3D world with Three.js
+- Multiplayer 3D world with React Three Fiber
 - Lucky block collection
-- Player authentication with JWT
+- Player authentication with JWT (username + password)
 - Player profiles and inventory
 - Server creation and management
 - Real-time WebSocket communication
-- Simple vanilla JavaScript client
 
 ## Tech Stack
 
-- **Client**: Vanilla JavaScript + Three.js
+- **Client**: React + Vite + TypeScript + Three.js (@react-three/fiber)
 - **Server**: Express + WebSocket + Node.js
 - **Database**: Neon PostgreSQL
 - **Auth**: JWT tokens + bcrypt
+- **State**: Zustand

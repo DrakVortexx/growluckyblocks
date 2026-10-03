@@ -1,11 +1,14 @@
 {
   "name": "grow-lucky-blocks",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A multiplayer 3D game with lucky blocks",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev:server": "node server.js",
+    "dev:client": "cd client && npm run dev",
+    "build:client": "cd client && npm run build",
+    "install:all": "cd client && npm install && cd .. && npm install"
   },
   "dependencies": {
     "express": "^4.21.2",
