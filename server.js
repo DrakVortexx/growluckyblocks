@@ -1,15 +1,27 @@
 const http = require("http");
 const express = require("express");
 const { randomUUID } = require("crypto");
+const { hasDatabaseConfig } = require("./database");
 const { admin, db, hasFirebaseConfig, firebaseProjectId } = require("./firebase");
+const {
+  getDocumentById,
+  listDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  isDatastoreNotFound,
+  isDatastoreAuthError,
+  sanitizeDocData,
+  deepClone,
+  mergePatch
+} = require("./db-operations");
 const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = Number(process.env.PORT || 3000);
-const PLAYERS_COLLECTION_ID = process.env.FIREBASE_PLAYERS_COLLECTION_ID || "players";
-const TRADES_COLLECTION_ID = process.env.FIREBASE_TRADES_COLLECTION_ID || "trades";
-const CHAT_COLLECTION_ID = process.env.FIREBASE_CHAT_COLLECTION_ID || "chat";
-const SERVERS_COLLECTION_ID = process.env.FIREBASE_SERVERS_COLLECTION_ID || "servers";
-const PLAYERS_BLOB_FIELD = process.env.FIREBASE_PLAYERS_BLOB_FIELD || "profile";
+const PLAYERS_COLLECTION_ID = process.env.PLAYERS_TABLE || "players";
+const TRADES_COLLECTION_ID = process.env.TRADES_TABLE || "trades";
+const CHAT_COLLECTION_ID = process.env.CHAT_TABLE || "chat";
+const SERVERS_COLLECTION_ID = process.env.SERVERS_TABLE || "servers";
 
 // Player data caching system to reduce Firebase operations
 const playerDataCache = new Map(); // playerId -> { data, lastSaveTime, dirty }
@@ -1001,162 +1013,9 @@ function filterServersByQuery(servers, query) {
   });
 }
 
-function deepClone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
 
-function isFirestoreBackoff() {
-  return Date.now() < firestoreBackoffUntil;
-}
 
-function isFirestoreTransientError(err) {
-  if (!err) return false;
-  const code = Number(err.code);
-  const msg = String(err.message || "").toLowerCase();
-  return code === 8
-    || code === 4
-    || code === 429
-    || code === 503
-    || msg.includes("resource_exhausted")
-    || msg.includes("quota exceeded")
-    || msg.includes("deadline")
-    || msg.includes("timeout")
-    || msg.includes("rate limit");
-}
 
-function setPathValue(target, path, value) {
-  const parts = String(path).split(".");
-  let node = target;
-  for (let i = 0; i < parts.length - 1; i += 1) {
-    const k = parts[i];
-    if (!node[k] || typeof node[k] !== "object") node[k] = {};
-    node = node[k];
-  }
-  node[parts[parts.length - 1]] = value;
-}
-
-function mergePatch(base, patch) {
-  const out = deepClone(base || {}) || {};
-  for (const [k, v] of Object.entries(patch || {})) setPathValue(out, k, v);
-  return out;
-}
-
-function isDatastoreNotFound(err) {
-  return Number(err?.code) === 404
-    || Number(err?.code) === 5
-    || String(err?.type || "").includes("not_found")
-    || String(err?.message || "").toLowerCase().includes("no document to update");
-}
-
-function isDatastoreAuthError(err) {
-  const code = Number(err?.code);
-  const msg = String(err?.message || "").toLowerCase();
-  return code === 401
-    || code === 403
-    || code === 7
-    || msg.includes("unauthorized")
-    || msg.includes("forbidden")
-    || msg.includes("missing scope");
-}
-
-function sanitizeDocData(obj) {
-  const out = deepClone(obj || {}) || {};
-  delete out.$id;
-  delete out.$collectionId;
-  delete out.$databaseId;
-  delete out.$permissions;
-  delete out.$createdAt;
-  delete out.$updatedAt;
-  return out;
-}
-
-async function getDocumentById(collectionId, documentId, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const snap = await db.collection(collectionId).doc(documentId).get();
-    if (!snap.exists) {
-      const e = new Error("not_found");
-      e.code = 404;
-      throw e;
-    }
-    return { $id: snap.id, ...sanitizeDocData(snap.data() || {}) };
-  });
-}
-
-async function listDocuments(collectionId, queries = [], actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    let q = db.collection(collectionId);
-    let limitN = 100;
-    for (const entry of Array.isArray(queries) ? queries : []) {
-      if (!entry || typeof entry !== "object") continue;
-      if (entry.op === "equal") {
-        q = q.where(String(entry.field || ""), "==", entry.value);
-      } else if (entry.op === "limit") {
-        const n = Number(entry.value || 0);
-        if (Number.isFinite(n) && n > 0) limitN = Math.floor(n);
-      }
-    }
-    const snap = await q.limit(limitN).get();
-    return {
-      documents: snap.docs.map((d) => ({ $id: d.id, ...sanitizeDocData(d.data() || {}) }))
-    };
-  });
-}
-
-async function createDocument(collectionId, documentId, data, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const payload = sanitizeDocData(data);
-    await db.collection(collectionId).doc(documentId).set(payload, { merge: false });
-    return { $id: documentId, ...payload };
-  });
-}
-
-async function updateDocument(collectionId, documentId, data, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    const payload = sanitizeDocData(data);
-    const ref = db.collection(collectionId).doc(documentId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      const e = new Error("not_found");
-      e.code = 404;
-      throw e;
-    }
-    await ref.set(payload, { merge: true });
-    return { $id: documentId, ...payload };
-  });
-}
-
-async function deleteDocument(collectionId, documentId, actor = null) {
-  void actor;
-  return datastoreCall(async () => {
-    await db.collection(collectionId).doc(documentId).delete();
-    return { ok: true };
-  });
-}
-
-async function datastoreCall(op) {
-  try {
-    return await Promise.race([
-      op(),
-      new Promise((_, reject) => {
-        setTimeout(() => {
-          const e = new Error("datastore-timeout");
-          e.code = 4;
-          reject(e);
-        }, FIRESTORE_TIMEOUT_MS);
-      })
-    ]);
-  } catch (err) {
-    if (isFirestoreTransientError(err)) {
-      firestoreBackoffUntil = Date.now() + FIRESTORE_BACKOFF_MS;
-      err.firestoreTransient = true;
-    }
-    throw err;
-  }
-}
 
 async function getPlayerDoc(playerId, actor = null) {
   try {
@@ -1166,29 +1025,17 @@ async function getPlayerDoc(playerId, actor = null) {
       return cachedData;
     }
     
-    // Load from Firebase if not in cache
+    // Load from database if not in cache
     const doc = await getDocumentById(PLAYERS_COLLECTION_ID, playerId, actor);
     if (!doc) {
       playerCache.delete(playerId);
       return null;
     }
     
-    // Process and cache the data
-    const data = sanitizeDocData(doc);
-    if (typeof data[PLAYERS_BLOB_FIELD] === "string") {
-      try {
-        const parsed = JSON.parse(data[PLAYERS_BLOB_FIELD]);
-        if (parsed && typeof parsed === "object") {
-          playerCache.set(playerId, deepClone(parsed));
-          cachePlayerData(playerId, parsed); // Add to new cache
-          return parsed;
-        }
-      } catch {
-        // keep raw doc mode
-      }
-    }
+    // Process and cache the data - PostgreSQL returns JSONB directly
+    const data = doc;
     playerCache.set(playerId, deepClone(data));
-    cachePlayerData(playerId, data); // Add to new cache
+    cachePlayerData(playerId, data);
     return data;
   } catch (err) {
     if (isDatastoreNotFound(err)) {
@@ -1196,10 +1043,9 @@ async function getPlayerDoc(playerId, actor = null) {
       return null;
     }
     if (isDatastoreAuthError(err)) {
-      console.error("getPlayerDoc auth error (check APPWRITE key + collection permissions):", err?.message || err);
+      console.error("getPlayerDoc auth error:", err?.message || err);
       return deepClone(playerCache.get(playerId) || null);
     }
-    if (err.firestoreTransient) return deepClone(playerCache.get(playerId) || null);
     console.error("getPlayerDoc degraded read:", err?.message || err);
     return deepClone(playerCache.get(playerId) || null);
   }
@@ -1228,23 +1074,8 @@ async function setPlayerDocMerge(playerId, patch, actor = null, opts = null) {
       }
     }
   } catch (err) {
-    // Fallback for strict Appwrite schemas: store full player object in one text column.
-    try {
-      const blobPayload = { [PLAYERS_BLOB_FIELD]: JSON.stringify(merged) };
-      try {
-        await updateDocument(PLAYERS_COLLECTION_ID, playerId, blobPayload, actor);
-      } catch (err2) {
-        if (isDatastoreNotFound(err2)) {
-          await createDocument(PLAYERS_COLLECTION_ID, playerId, blobPayload, actor);
-        } else {
-          throw err2;
-        }
-      }
-    } catch (blobErr) {
-      if (strict) throw blobErr;
-      console.error("setPlayerDocMerge degraded write", blobErr?.message || blobErr);
-      // Keep gameplay alive even if Appwrite schema/permissions are not ready.
-    }
+    if (strict) throw err;
+    console.error("setPlayerDocMerge degraded write", err?.message || err);
   }
   return merged;
 }
@@ -1328,6 +1159,11 @@ async function loadPersistedServers() {
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(__dirname));
+
+// Serve index.html for root and client routes
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/index.html");
+});
 
 async function verifyAuth(req, res, opts = {}) {
   const strict = opts.strict !== false;
@@ -2471,22 +2307,21 @@ async function findPlayerIdByUsername(usernameRaw) {
   }
 
   try {
-    const snap = await db.collection(PLAYERS_COLLECTION_ID)
-      .where("profile.usernameLower", "==", wantedKey)
-      .limit(1)
-      .get();
-    const doc = snap.docs?.[0];
-    if (doc?.id) return String(doc.id);
+    const result = await listDocuments(PLAYERS_COLLECTION_ID, [
+      Query.equal("profile->>'usernameLower'", wantedKey),
+      Query.limit(1)
+    ]);
+    if (result.documents?.[0]?.$id) return String(result.documents[0].$id);
   } catch {
     // fallback scan below
   }
 
   try {
-    const snap = await db.collection(PLAYERS_COLLECTION_ID).limit(3000).get();
-    for (const d of snap.docs || []) {
-      const pid = String(d.id || "");
+    const result = await listDocuments(PLAYERS_COLLECTION_ID, [Query.limit(3000)]);
+    for (const d of result.documents || []) {
+      const pid = String(d.$id || "");
       if (!pid) continue;
-      const parsed = ensurePlayerDataShape(parsePlayerDocAny(d.data() || {}), 0);
+      const parsed = ensurePlayerDataShape(parsePlayerDocAny(d), 0);
       if (usernameKey(parsed?.profile?.username || "") === wantedKey) return pid;
     }
   } catch {
@@ -2523,12 +2358,12 @@ function removeWhitelistUsername(serverState, username) {
 }
 
 async function computeCashLeaderboard(limit = 10) {
-  const snap = await db.collection(PLAYERS_COLLECTION_ID).limit(1500).get();
+  const result = await listDocuments(PLAYERS_COLLECTION_ID, [Query.limit(1500)]);
   const rows = [];
-  for (const d of snap.docs || []) {
-    const playerId = String(d.id || "");
+  for (const d of result.documents || []) {
+    const playerId = String(d.$id || "");
     if (!playerId) continue;
-    const playerDoc = ensurePlayerDataShape(parsePlayerDocAny(d.data() || {}), 0);
+    const playerDoc = ensurePlayerDataShape(parsePlayerDocAny(d), 0);
     rows.push({
       playerId,
       username: getUsernameFromPlayerDoc(playerDoc, playerId),
@@ -4478,9 +4313,9 @@ setInterval(() => {
 loadPersistedServers().finally(() => {
   server.listen(PORT, () => {
     console.log(`Lucky Garden server listening on http://localhost:${PORT}`);
-    console.log(`[Firebase] project=${firebaseProjectId || "unset"} configured=${hasFirebaseConfig ? "yes" : "no"}`);
-    console.log(`[Firebase] collections(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID}, servers=${SERVERS_COLLECTION_ID})`);
-    console.log(`[Batch Save] Enabled - saving to Firebase every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
+    console.log(`[Database] configured=${hasDatabaseConfig ? "yes" : "no"}`);
+    console.log(`[Database] tables(players=${PLAYERS_COLLECTION_ID}, trades=${TRADES_COLLECTION_ID}, chat=${CHAT_COLLECTION_ID}, servers=${SERVERS_COLLECTION_ID})`);
+    console.log(`[Batch Save] Enabled - saving to database every ${BATCH_SAVE_INTERVAL_MS/1000} seconds or on player disconnect`);
   });
 });
 
