@@ -44,10 +44,7 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY,
         username VARCHAR(255) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255),
-        auth_provider VARCHAR(50) DEFAULT 'local',
-        auth_provider_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -119,10 +116,10 @@ function generateToken(userId) {
 // Auth endpoints
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, password, username } = req.body;
+    const { username, password } = req.body;
 
-    if (!email || !password || !username) {
-      return res.status(400).json({ error: 'All fields required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
     }
 
     if (username.length < 3) {
@@ -131,12 +128,12 @@ app.post('/api/auth/signup', async (req, res) => {
 
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT * FROM users WHERE username = $1 OR email = $2',
-      [username, email]
+      'SELECT * FROM users WHERE username = $1',
+      [username]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ error: 'Username or email already taken' });
+      return res.status(409).json({ error: 'Username already taken' });
     }
 
     // Hash password
@@ -145,8 +142,8 @@ app.post('/api/auth/signup', async (req, res) => {
     // Create user
     const userId = uuidv4();
     await pool.query(
-      'INSERT INTO users (id, username, email, password, auth_provider, auth_provider_id) VALUES ($1, $2, $3, $4, $5, $6)',
-      [userId, username, email, hashedPassword, 'local', email]
+      'INSERT INTO users (id, username, password) VALUES ($1, $2, $3)',
+      [userId, username, hashedPassword]
     );
 
     // Create profile and settings
@@ -161,7 +158,7 @@ app.post('/api/auth/signup', async (req, res) => {
     );
 
     const token = generateToken(userId);
-    const user = { id: userId, username, email };
+    const user = { id: userId, username };
 
     res.json({ ok: true, user, token });
   } catch (error) {
@@ -172,13 +169,13 @@ app.post('/api/auth/signup', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
     }
 
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -194,7 +191,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = generateToken(user.id);
-    const userData = { id: user.id, username: user.username, email: user.email };
+    const userData = { id: user.id, username: user.username };
 
     res.json({ ok: true, user: userData, token });
   } catch (error) {
@@ -240,7 +237,7 @@ app.post('/api/servers/create', authenticateToken, async (req, res) => {
 // Player endpoints
 app.get('/api/player/me', authenticateToken, async (req, res) => {
   try {
-    const userResult = await pool.query('SELECT id, username, email FROM users WHERE id = $1', [req.user.uid]);
+    const userResult = await pool.query('SELECT id, username FROM users WHERE id = $1', [req.user.uid]);
     const profileResult = await pool.query('SELECT * FROM player_profiles WHERE user_id = $1', [req.user.uid]);
     const settingsResult = await pool.query('SELECT * FROM player_settings WHERE user_id = $1', [req.user.uid]);
 

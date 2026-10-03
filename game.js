@@ -31,14 +31,14 @@ function showLogin() {
 }
 
 async function login() {
-    const email = document.getElementById('login-email').value;
+    const username = document.getElementById('login-username').value;
     const password = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
 
     try {
         const data = await apiCall('/api/auth/login', {
             method: 'POST',
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
 
         if (data.ok) {
@@ -55,14 +55,13 @@ async function login() {
 
 async function signup() {
     const username = document.getElementById('signup-username').value;
-    const email = document.getElementById('signup-email').value;
     const password = document.getElementById('signup-password').value;
     const errorDiv = document.getElementById('signup-error');
 
     try {
         const data = await apiCall('/api/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({ username, email, password })
+            body: JSON.stringify({ username, password })
         });
 
         if (data.ok) {
