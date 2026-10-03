@@ -43,6 +43,12 @@ npm run install:all
 
 ### 3. Start the application
 
+**Option 1: Run both client and server together (recommended)**
+```bash
+npm run dev
+```
+
+**Option 2: Run separately**
 Terminal 1 (server):
 ```bash
 npm run dev:server

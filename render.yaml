@@ -3,9 +3,7 @@ services:
     name: growluckyblocks
     env: node
     plan: free
-    buildCommand: |
-      cd client && npm install && npm run build
-      cd .. && npm install
+    buildCommand: cd client && npm install && npm run build && cd .. && npm install
     startCommand: node server.js
     envVars:
       - key: DATABASE_URL
